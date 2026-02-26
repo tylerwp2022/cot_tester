@@ -1,0 +1,3513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CoT Message Builder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #58a6ff;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    color: #6e7681;
+    margin-bottom: 24px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1400px;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .panel-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b949e;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #21262d;
+  }
+
+  .section {
+    margin-bottom: 20px;
+  }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #58a6ff;
+    margin-bottom: 10px;
+    padding: 4px 0;
+    border-left: 3px solid #58a6ff;
+    padding-left: 8px;
+  }
+
+  .field {
+    margin-bottom: 10px;
+  }
+
+  .field label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #8b949e;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  .field label .tag {
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    background: #21262d;
+    color: #79c0ff;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .field label .required {
+    color: #f85149;
+    font-size: 0.65rem;
+  }
+
+  .field label .optional {
+    color: #6e7681;
+    font-size: 0.65rem;
+  }
+
+  input, select, textarea {
+    width: 100%;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    color: #c9d1d9;
+    font-size: 0.8rem;
+    padding: 6px 10px;
+    transition: border-color 0.15s;
+    font-family: inherit;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #58a6ff;
+  }
+
+  select option { background: #161b22; }
+
+  .hint {
+    font-size: 0.68rem;
+    color: #6e7681;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  .hint code {
+    font-family: 'Courier New', monospace;
+    color: #79c0ff;
+    background: #21262d;
+    padding: 0 3px;
+    border-radius: 2px;
+    font-size: 0.65rem;
+  }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  .toggle-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-section input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+    accent-color: #58a6ff;
+  }
+
+  .toggle-section span {
+    font-size: 0.75rem;
+    color: #8b949e;
+  }
+
+  .collapsible { display: none; }
+  .collapsible.active { display: block; }
+
+  /* Output panel */
+  .output-panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+    grid-column: 1 / -1;
+  }
+
+  .output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #21262d;
+    border-bottom: 1px solid #30363d;
+  }
+
+  .output-header span {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b949e;
+  }
+
+  .btn-group { display: flex; gap: 8px; }
+
+  button {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    color: #c9d1d9;
+    font-size: 0.75rem;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+
+  button:hover { background: #30363d; border-color: #58a6ff; color: #58a6ff; }
+
+  button.primary {
+    background: #1f6feb;
+    border-color: #1f6feb;
+    color: #fff;
+  }
+  button.primary:hover { background: #388bfd; border-color: #388bfd; color: #fff; }
+
+  pre {
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    padding: 16px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #c9d1d9;
+    min-height: 100px;
+  }
+
+  /* Syntax highlighting */
+  .xml-tag { color: #7ee787; }
+  .xml-attr { color: #79c0ff; }
+  .xml-value { color: #a5d6ff; }
+  .xml-comment { color: #6e7681; font-style: italic; }
+
+  .preset-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .preset-card:hover {
+    border-color: #58a6ff;
+    background: #111923;
+  }
+  .preset-card.selected {
+    border-color: #58a6ff;
+    background: #111923;
+    box-shadow: 0 0 0 1px #58a6ff33;
+  }
+  .preset-card-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #c9d1d9;
+    margin-bottom: 4px;
+  }
+  .preset-card-type {
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+    color: #79c0ff;
+    background: #21262d;
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-bottom: 6px;
+  }
+  .preset-card-desc {
+    font-size: 0.7rem;
+    color: #6e7681;
+    line-height: 1.4;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #238636;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; }
+
+  .type-helper {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 0.7rem;
+  }
+
+  .type-tree {
+    font-family: 'Courier New', monospace;
+    color: #79c0ff;
+    line-height: 1.8;
+  }
+
+  .type-tree span { color: #f0883e; }
+</style>
+</head>
+<body>
+
+<h1>⚡ Cursor on Target (CoT) Message Builder</h1>
+<p class="subtitle">Fill in the fields below — the XML is generated automatically. Hover labels for field documentation.</p>
+
+<div class="layout">
+
+  <!-- ══════════════════════════════════════════════════════ RAW COT PARSER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">🔍 Raw CoT Analyzer — Paste & Parse</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Paste any raw CoT XML — from the TAK server stream, ATAK, or a log file. Click Analyze to break it down and optionally load it into the form fields.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: Input -->
+      <div>
+        <div class="section-label">Raw CoT XML Input</div>
+        <textarea id="rawCotInput" rows="10"
+          style="font-family:'Courier New',monospace;font-size:0.72rem;line-height:1.5;resize:vertical;"
+          placeholder="Paste raw CoT XML here...&#10;&#10;e.g. &lt;event version=&quot;2.0&quot; uid=&quot;...&quot; type=&quot;a-f-G-U-C&quot; ...&gt;&#10;  &lt;point .../&gt;&#10;  &lt;detail&gt;...&lt;/detail&gt;&#10;&lt;/event&gt;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="primary" onclick="parseRawCoT()" style="font-size:0.8rem;padding:7px 16px;">🔍 Analyze</button>
+          <button onclick="parseAndLoad()" style="font-size:0.8rem;padding:7px 16px;" title="Parse and load all fields into the form below">↓ Load into Form</button>
+          <button onclick="parseAndSend()" style="font-size:0.8rem;padding:7px 16px;" title="Send this raw XML directly — timestamps are NOT updated">▶ Send As-Is</button>
+          <button onclick="parseAndSendFresh()" style="font-size:0.8rem;padding:7px 16px;" title="Send with timestamps updated to now">▶ Send with Fresh Timestamps</button>
+          <button onclick="document.getElementById('rawCotInput').value='';clearParseResults();" style="font-size:0.68rem;padding:5px 10px;color:#6e7681;">✕ Clear</button>
+        </div>
+        <div class="hint" style="margin-top:8px;">
+          Tip: paste directly from any of these sources — the analyzer handles each format automatically:<br/>
+          • TAK server stream (<code>http://10.10.10.3:8088</code>) — strips <code>data: '...'</code> wrapper<br/>
+          • ROS2 <code>ros2 topic echo /warthog1/incoming_cot</code> — unescapes <code>\"</code> and <code>\n</code><br/>
+          • Plain CoT XML — used as-is
+        </div>
+      </div>
+
+      <!-- RIGHT: Analysis output -->
+      <div>
+        <div class="section-label" id="parseResultLabel" style="display:none;">Analysis</div>
+        <div id="parseResults" style="display:none;">
+
+          <!-- Parse error -->
+          <div id="parseError" style="display:none;background:#1a0d0d;border:1px solid #f85149;border-radius:5px;padding:10px;font-size:0.75rem;color:#f85149;margin-bottom:10px;"></div>
+
+          <!-- Field breakdown table -->
+          <div id="parseTable" style="display:none;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+              <thead>
+                <tr style="border-bottom:1px solid #30363d;">
+                  <th style="text-align:left;padding:4px 8px;color:#6e7681;font-weight:600;width:38%;">Field</th>
+                  <th style="text-align:left;padding:4px 8px;color:#6e7681;font-weight:600;">Value</th>
+                </tr>
+              </thead>
+              <tbody id="parseTableBody"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ LEFT PANEL -->
+  <div class="panel">
+    <div class="panel-title">Event Envelope</div>
+
+    <!-- IDENTITY -->
+    <div class="section">
+      <div class="section-label">Identity</div>
+
+      <div class="field">
+        <label><span class="tag">uid</span> Unique Identifier <span class="required">required</span></label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="uid" placeholder="ANDROID-dfac01d76beec661  or  a UUID  or  robot-name-serialno"/>
+          <button type="button" onclick="generateUID()" title="Generate a random UUID" style="white-space:nowrap;flex-shrink:0;">⚄ Gen UUID</button>
+        </div>
+        <div class="hint">Must be globally unique and stable for this entity. Device beacons use <code>ANDROID-xxxx</code>. Robots can use <code>ugv_warthog-hostname</code>. Manual markers use a random UUID.</div>
+      </div>
+
+      <div class="field">
+        <label><span class="tag">callsign</span> Callsign <span class="required">required</span></label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="callsign" placeholder="TRILL / test_robot1 / ALPHA-2"/>
+          <button type="button" onclick="generateCallsign()" title="Generate a random NATO callsign" style="white-space:nowrap;flex-shrink:0;">⚄ Gen Callsign</button>
+        </div>
+        <div class="hint">Human-readable name shown on the ATAK map.</div>
+      </div>
+    </div>
+
+    <!-- TYPE -->
+    <div class="section">
+      <div class="section-label">Event Type</div>
+
+      <div class="field">
+        <label><span class="tag">type</span> CoT Type String <span class="required">required</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="type" placeholder="a-f-G-U-C" oninput="updateTypeHelper()"/>
+          <select id="typePreset" onchange="applyTypePreset()" style="width:auto;white-space:nowrap;">
+            <option value="">— presets —</option>
+            <optgroup label="Friendly">
+              <option value="a-f-G-U-C">Friendly Ground Infantry</option>
+              <option value="a-f-G-U-C-I">Friendly Ground Infantry (Individual)</option>
+              <option value="a-f-G-U-C-F">Friendly Ground Infantry (Leader)</option>
+              <option value="a-f-G-E-V">Friendly Ground Vehicle (Equipment)</option>
+              <option value="a-f-G-U-C-R">Friendly UGV — Combat Reconnaissance (verified)</option>
+              <option value="a-f-G-U-C-V-U">Friendly UAV — Generic (Ground classification)</option>
+              <option value="a-f-G-U-C-V-U-R">Friendly UAV — Rotary Wing / Quadcopter (Ground classification)</option>
+              <option value="a-f-G-U-C-V-U-F">Friendly UAV — Fixed Wing (Ground classification)</option>
+              <option value="a-f-A-M-H-Q">Friendly UAV — Rotary Wing Drone RPV (Air classification)</option>
+            </optgroup>
+            <optgroup label="Hostile">
+              <option value="a-h-G-U-C">Hostile Ground Infantry</option>
+              <option value="a-h-G-E-V">Hostile Ground Vehicle</option>
+              <option value="a-h-G-U-C-V-U">Hostile UAV — Generic</option>
+              <option value="a-h-G-U-C-V-U-R">Hostile UAV — Rotary Wing</option>
+              <option value="a-h-G-U-C-V-U-F">Hostile UAV — Fixed Wing</option>
+              <option value="a-h-A-M-H-Q">Hostile UAV — Rotary Wing Drone RPV (Air)</option>
+            </optgroup>
+            <optgroup label="Unknown">
+              <option value="a-u-G">Unknown Ground</option>
+              <option value="a-u-A">Unknown Air</option>
+            </optgroup>
+            <optgroup label="Neutral">
+              <option value="a-n-G-U-C">Neutral Ground Infantry</option>
+            </optgroup>
+            <optgroup label="Special">
+              <option value="b-t-f">TAK Chat Message</option>
+              <option value="b-i-x-i">GeoChat</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="type-helper" id="typeHelper">
+          <div class="type-tree">Select a type or type above to see breakdown</div>
+        </div>
+        <div class="hint" style="margin-top:6px;">Format: <code>atom - affiliation - battle_dimension - category - subcategory</code></div>
+      </div>
+
+      <div class="field">
+        <label><span class="tag">how</span> How Determined <span class="required">required</span></label>
+        <select id="how">
+          <option value="m-g">m-g — Machine GPS (autonomous system, robot)</option>
+          <option value="h-e">h-e — Human Entered (manually typed coordinates)</option>
+          <option value="h-g-i-g-o">h-g-i-g-o — Human tapped map (long-press drop pin)</option>
+          <option value="h-c">h-c — Human calculated</option>
+          <option value="m-i">m-i — Machine inferred</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- TIMING -->
+    <div class="section">
+      <div class="section-label">Timing</div>
+
+      <div class="field">
+        <label>Stale Duration (minutes) <span class="required">required</span></label>
+        <input type="number" id="staleMins" value="5" min="1" max="1440"/>
+        <div class="hint"><code>time</code> and <code>start</code> are set to now automatically. Stale = now + this many minutes.</div>
+      </div>
+    </div>
+
+    <!-- POSITION -->
+    <div class="section">
+      <div class="section-label">Position</div>
+
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">lat</span> Latitude <span class="required">required</span></label>
+          <input type="number" id="lat" step="0.0000001" placeholder="41.3912267"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">lon</span> Longitude <span class="required">required</span></label>
+          <input type="number" id="lon" step="0.0000001" placeholder="-73.9527021"/>
+        </div>
+      </div>
+
+      <div class="row3">
+        <div class="field">
+          <label><span class="tag">hae</span> Height Above Ellipsoid (m)</label>
+          <input type="number" id="hae" step="0.1" value="0" placeholder="-32.2"/>
+          <div class="hint">WGS84 ellipsoid height. Use <code>0</code> if unknown.</div>
+        </div>
+        <div class="field">
+          <label><span class="tag">ce</span> Circular Error (m)</label>
+          <input type="number" id="ce" value="9999999.0" placeholder="9999999.0"/>
+          <div class="hint"><code>9999999</code> = unknown. Use <code>10</code> for good GPS.</div>
+        </div>
+        <div class="field">
+          <label><span class="tag">le</span> Linear Error (m)</label>
+          <input type="number" id="le" value="9999999.0" placeholder="9999999.0"/>
+          <div class="hint">Vertical position uncertainty. Same convention as ce.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ RIGHT PANEL -->
+  <div class="panel">
+    <div class="panel-title">Detail Block</div>
+
+    <!-- GROUP -->
+    <div class="section">
+      <div class="section-label">Team / Group</div>
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">__group name</span> Color</label>
+          <select id="groupColor">
+            <option value="Cyan">Cyan</option>
+            <option value="Blue">Blue</option>
+            <option value="Red">Red</option>
+            <option value="Green">Green</option>
+            <option value="Yellow">Yellow</option>
+            <option value="White">White</option>
+            <option value="Purple">Purple</option>
+            <option value="Maroon">Maroon</option>
+          </select>
+        </div>
+        <div class="field">
+          <label><span class="tag">__group role</span> Role</label>
+          <select id="groupRole">
+            <option value="Team Lead">Team Lead</option>
+            <option value="Team Member">Team Member</option>
+            <option value="HQ">HQ</option>
+            <option value="Sniper">Sniper</option>
+            <option value="Medic">Medic</option>
+            <option value="Forward Observer">Forward Observer</option>
+            <option value="RTO">RTO</option>
+            <option value="K9">K9</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRACK -->
+    <div class="section">
+      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Track (Movement)</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.7rem;color:#8b949e;font-weight:500;text-transform:none;letter-spacing:0;border:none;padding:0;margin:0;">
+          <input type="checkbox" id="enableTrack" checked style="width:auto;accent-color:#58a6ff;cursor:pointer;" onchange="generateXML()"/>
+          include in XML
+        </label>
+      </div>
+      <div id="trackSection">
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">speed</span> Speed (m/s)</label>
+            <input type="number" id="speed" step="0.01" value="0.0" placeholder="0.0"/>
+            <div class="hint">⚠️ ATAK only renders the orientation arrow when speed ≥ 1.4 m/s. Use 0.0 for stationary.</div>
+          </div>
+          <div class="field">
+            <label><span class="tag">course</span> Heading (° true north)</label>
+            <input type="number" id="course" step="0.01" value="0.0" min="0" max="360" placeholder="0.0"/>
+            <div class="hint">0 = North, 90 = East, 180 = South, 270 = West</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLATFORM -->
+    <div class="section">
+      <div class="section-label">Platform / Client</div>
+
+      <div class="field">
+        <label>Platform Preset</label>
+        <select id="platformPreset" onchange="applyPlatformPreset()">
+          <option value="">— choose or fill manually —</option>
+          <option value="atak_android">ATAK (Android Phone)</option>
+          <option value="wintak">WinTAK (Windows)</option>
+          <option value="pytak_robot">PyTAK Robot (Ubuntu)</option>
+          <option value="pytak_drone">PyTAK Drone (Ubuntu)</option>
+        </select>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">takv device</span> Device Name</label>
+          <input type="text" id="takvDevice" placeholder="SAMSUNG SM-G736U1"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">takv platform</span> Platform</label>
+          <input type="text" id="takvPlatform" placeholder="ATAK"/>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">takv os</span> OS</label>
+          <input type="text" id="takvOs" placeholder="36 (Android API level) or Ubuntu 24.04"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">takv version</span> TAK Version</label>
+          <input type="text" id="takvVersion" placeholder="5.6.0.12 or 5.3.0.155"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATUS -->
+    <div class="section">
+      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Status</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.7rem;color:#8b949e;font-weight:500;text-transform:none;letter-spacing:0;border:none;padding:0;margin:0;">
+          <input type="checkbox" id="enableBattery" checked style="width:auto;accent-color:#58a6ff;cursor:pointer;" onchange="generateXML()"/>
+          include battery in XML
+        </label>
+      </div>
+      <div class="row2">
+        <div class="field" id="batteryField">
+          <label><span class="tag">battery</span> Battery %</label>
+          <input type="number" id="battery" min="0" max="100" value="100"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">endpoint</span> Contact Endpoint</label>
+          <input type="text" id="endpoint" value="*:-1:stcp"/>
+          <div class="hint"><code>*:-1:stcp</code> = relay via TAK server (most common)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPTIONAL SECTIONS -->
+    <div class="section">
+      <div class="section-label">Optional Sections</div>
+
+      <!-- PRECISION LOCATION -->
+      <div class="toggle-section">
+        <input type="checkbox" id="enablePrecision" onchange="toggleSection('precisionSection', this)"/>
+        <span>Include &lt;precisionlocation&gt; (ATAK devices)</span>
+      </div>
+      <div id="precisionSection" class="collapsible">
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">geopointsrc</span> Geo Point Source</label>
+            <select id="geopointsrc">
+              <option value="USER">USER (manually placed)</option>
+              <option value="GPS">GPS</option>
+              <option value="CALCULATED">CALCULATED</option>
+            </select>
+          </div>
+          <div class="field">
+            <label><span class="tag">altsrc</span> Altitude Source</label>
+            <select id="altsrc">
+              <option value="SRTM1">SRTM1 (terrain lookup)</option>
+              <option value="GPS">GPS</option>
+              <option value="DTED0">DTED0</option>
+              <option value="DTED1">DTED1</option>
+              <option value="DTED2">DTED2</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARCHIVE -->
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableArchive" />
+        <span>Include &lt;archive/&gt; (persistent marker — survives stale)</span>
+      </div>
+
+      <!-- MIL-STD SYMBOL -->
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableMilsym" onchange="toggleSection('milsymSection', this)"/>
+        <span>Include MIL-STD-2525C symbol codes</span>
+      </div>
+      <div id="milsymSection" class="collapsible">
+        <div class="field">
+          <label><span class="tag">__milsym id</span> 2525C Symbol ID</label>
+          <input type="text" id="milsymId" placeholder="SFG*EV----*****"/>
+          <div class="hint">Position: <code>S=Symbol F=Affiliation B=BattleDim *=Status FunctionID Modifiers</code></div>
+        </div>
+      </div>
+
+      <!-- LINK (creator/parent) -->
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableLink" onchange="toggleSection('linkSection', this)"/>
+        <span>Include &lt;link&gt; (associate with parent entity)</span>
+      </div>
+      <div id="linkSection" class="collapsible">
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">link uid</span> Parent UID</label>
+            <input type="text" id="linkUid" placeholder="ANDROID-dfac01d76beec661"/>
+          </div>
+          <div class="field">
+            <label><span class="tag">parent_callsign</span></label>
+            <input type="text" id="linkCallsign" placeholder="TRILL"/>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">relation</span></label>
+            <select id="linkRelation">
+              <option value="p-p">p-p (part of)</option>
+              <option value="c-c">c-c (connected to)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label><span class="tag">type</span> Parent Type</label>
+            <input type="text" id="linkType" placeholder="a-f-G-U-C"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- REMARKS -->
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableRemarks" onchange="toggleSection('remarksSection', this)"/>
+        <span>Include &lt;remarks&gt;</span>
+      </div>
+      <div id="remarksSection" class="collapsible">
+        <div class="field">
+          <textarea id="remarks" rows="2" placeholder="Free text remarks visible in ATAK..."></textarea>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ TAK SERVER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">📡 TAK Server — Send CoT</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: Connection config -->
+      <div>
+        <div class="section-label">Connection</div>
+
+        <!-- ── Quick proxy shortcut ── -->
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px 12px;margin-bottom:14px;">
+          <div style="font-size:0.7rem;font-weight:700;color:#58a6ff;margin-bottom:8px;letter-spacing:0.04em;">⚡ LOCAL PROXY SHORTCUT</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:0.75rem;color:#8b949e;white-space:nowrap;">http://localhost:</span>
+            <input type="number" id="proxyPort" placeholder="5555" min="1" max="65535"
+                   style="width:90px;flex-shrink:0;"
+                   oninput="applyProxyShortcut()"/>
+            <button type="button" onclick="applyProxyShortcut()" style="white-space:nowrap;flex-shrink:0;">
+              → Fill URL
+            </button>
+            <span style="font-size:0.68rem;color:#6e7681;line-height:1.3;">
+              Fills the fields below with <code style="font-size:0.65rem;color:#79c0ff;background:#21262d;padding:0 3px;border-radius:2px;">localhost</code> + proxy path automatically
+            </span>
+          </div>
+        </div>
+
+        <div class="row2" style="margin-bottom:10px;">
+          <div class="field">
+            <label><span class="tag">Server URL</span> Base URL <span class="required">required</span></label>
+            <input type="text" id="takServerUrl" placeholder="http://10.0.0.1:8088" oninput="updateEndpointPreview()"/>
+            <div class="hint">Protocol + host + port. e.g. <code>http://10.10.10.3:8088</code> or <code>https://192.168.1.50:8443</code></div>
+          </div>
+          <div class="field">
+            <label><span class="tag">API Path</span></label>
+            <input type="text" id="takApiPath" value="/Marti/api/cot" oninput="updateEndpointPreview()"/>
+            <div class="hint">Local proxy: <code>/send</code> &nbsp;|&nbsp; TAK Server: <code>/Marti/api/cot</code> &nbsp;|&nbsp; FreeTAK: <code>/FreeTAKServer/api/v1/CoT</code></div>
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:6px;">
+          <label>Full endpoint preview</label>
+          <div id="endpointPreview" style="font-family:'Courier New',monospace;font-size:0.72rem;color:#79c0ff;background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:6px 10px;word-break:break-all;">
+            —
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:14px;">Authentication</div>
+
+        <div class="field">
+          <label>Auth Type</label>
+          <select id="takAuthType" onchange="updateAuthFields()">
+            <option value="none">None (open server / already on VPN)</option>
+            <option value="basic">Basic Auth (username + password)</option>
+            <option value="apikey">API Key / Bearer Token</option>
+          </select>
+        </div>
+
+        <div id="authBasicFields" style="display:none;">
+          <div class="row2">
+            <div class="field">
+              <label>Username</label>
+              <input type="text" id="takUser" placeholder="tak_admin" autocomplete="off"/>
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input type="password" id="takPass" placeholder="••••••••" autocomplete="off"/>
+            </div>
+          </div>
+        </div>
+
+        <div id="authTokenField" style="display:none;">
+          <div class="field">
+            <label>Bearer Token / API Key</label>
+            <input type="text" id="takToken" placeholder="eyJhbGciOiJIUzI1NiIs..." autocomplete="off"/>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="takIgnoreTls" style="width:auto;accent-color:#58a6ff;"/>
+            <span style="font-size:0.75rem;color:#8b949e;">Skip TLS certificate verification</span>
+          </label>
+          <div class="hint" style="margin-top:3px;">⚠️ Only for self-signed certs on trusted networks. Browsers enforce TLS — if your TAK server uses a self-signed cert, you may need to visit the URL directly in your browser first and accept the security exception, then return here.</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Send controls + log -->
+      <div>
+        <div class="section-label">Transmit</div>
+
+        <div class="row2" style="margin-bottom:12px;">
+          <div class="field">
+            <label>Repeat Send</label>
+            <select id="takRepeatMode" onchange="updateRepeatUI()">
+              <option value="once">Send once</option>
+              <option value="repeat">Repeat on interval</option>
+            </select>
+          </div>
+          <div class="field" id="takIntervalField" style="display:none;">
+            <label>Interval (seconds)</label>
+            <input type="number" id="takInterval" value="10" min="1" max="3600"/>
+            <div class="hint">Regenerates timestamps each send.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+          <button class="primary" onclick="sendCoT()" id="btnSend" style="font-size:0.85rem;padding:8px 20px;">
+            ▶ Send CoT
+          </button>
+          <button onclick="stopRepeat()" id="btnStop" style="display:none;font-size:0.85rem;padding:8px 20px;border-color:#f85149;color:#f85149;">
+            ■ Stop
+          </button>
+          <div id="repeatCounterBadge" style="display:none;align-items:center;padding:0 12px;background:#21262d;border:1px solid #30363d;border-radius:5px;font-size:0.75rem;color:#8b949e;">
+            Sent: <span id="repeatCounter" style="color:#58a6ff;font-weight:700;margin-left:4px;">0</span>
+          </div>
+        </div>
+
+        <!-- Status indicator -->
+        <div id="takStatusBox" style="display:none;background:#0d1117;border:1px solid #30363d;border-radius:6px;overflow:hidden;margin-bottom:12px;">
+          <div id="takStatusBar" style="padding:8px 12px;font-size:0.75rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+            <span id="takStatusIcon">●</span>
+            <span id="takStatusText">—</span>
+            <span id="takStatusCode" style="margin-left:auto;font-family:'Courier New',monospace;font-size:0.7rem;opacity:0.7;"></span>
+          </div>
+        </div>
+
+        <!-- Send log -->
+        <div class="section-label">Activity Log</div>
+        <div id="takLog" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:10px;height:160px;overflow-y:auto;font-family:'Courier New',monospace;font-size:0.7rem;line-height:1.7;color:#6e7681;">
+          <span style="color:#444;">Waiting for first send...</span>
+        </div>
+        <button onclick="clearLog()" style="margin-top:6px;font-size:0.68rem;padding:3px 10px;color:#6e7681;">Clear log</button>
+
+        <div class="hint" style="margin-top:12px;">
+          ⚠️ <strong style="color:#8b949e;">CORS note:</strong> Browsers block cross-origin requests unless the TAK server sends <code>Access-Control-Allow-Origin</code> headers. If sends fail with a network error, your TAK server may need CORS enabled, or use a local reverse proxy. See log for details.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ CHAT COMPOSER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">💬 GeoChat Message Composer</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Compose and send TAK chat messages (type <code>b-t-f</code>). Each send generates a fresh message UUID so messages are not deduplicated by the TAK server.
+    </div>
+
+    <!-- Mode toggle -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeDirect" value="direct" checked
+               onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>
+        Direct Message
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeGroup" value="group"
+               onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>
+        Group Message
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeTeam" value="team"
+               onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>
+        Team Color Broadcast
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeRole" value="role"
+               onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>
+        Role Broadcast
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeAll" value="all"
+               onchange="updateChatMode()" style="width:auto;accent-color:#f85149;cursor:pointer;"/>
+        🔴 All Chat Rooms
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeAllGroups" value="allgroups"
+               onchange="updateChatMode()" style="width:auto;accent-color:#f0883e;cursor:pointer;"/>
+        🟠 All Groups
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeAllTeams" value="allteams"
+               onchange="updateChatMode()" style="width:auto;accent-color:#3fb950;cursor:pointer;"/>
+        🟢 All Teams
+      </label>
+    </div>
+
+    <!-- Sender fields (always shown) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div class="field" style="margin:0;">
+        <label><span class="tag">senderCallsign</span> Your Callsign</label>
+        <input type="text" id="chatSenderCallsign" placeholder="FOXTROT-6" value="FOXTROT-6"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label><span class="tag">uid0</span> Sender Device UID</label>
+        <input type="text" id="chatSenderUid" placeholder="ANDROID-example0000000001" value="ANDROID-example0000000001"/>
+        <div class="hint">Your device UID — <code>ANDROID-xxxx</code> for ATAK devices.</div>
+      </div>
+    </div>
+
+    <!-- ── DIRECT MESSAGE FIELDS ── -->
+    <div id="chatDirectFields">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom</span> Chatroom Name (display)</label>
+          <input type="text" id="chatRecipient" placeholder="warthog1" value="warthog1"/>
+          <div class="hint">Display name in ATAK chat UI. For Warthog robots same as device UID. For ATAK users it's their callsign.</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label><span class="tag">id / uid1</span> Recipient Device UID <span class="required">required</span></label>
+          <input type="text" id="chatRecipientUid" placeholder="warthog1" value="warthog1"/>
+          <div class="hint">Recipient's registered UID. Warthog: <code>warthog1</code>, <code>warthog2</code>. ATAK: <code>ANDROID-xxxx</code>.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GROUP MESSAGE FIELDS ── -->
+    <div id="chatGroupFields" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom</span> Group Name (display)</label>
+          <input type="text" id="chatGroupName" placeholder="TRILL GROUP" value=""/>
+          <div class="hint">Display name shown in ATAK's group chat UI.</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label><span class="tag">id</span> Group UUID</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="chatGroupUid" placeholder="auto-generated"/>
+            <button type="button" onclick="document.getElementById('chatGroupUid').value=genUuid();buildChatXml();"
+                    style="white-space:nowrap;flex-shrink:0;font-size:0.7rem;padding:4px 8px;">⚄ Gen</button>
+          </div>
+          <div class="hint">Stable UUID for this group — reuse the same UUID to maintain group continuity across messages.</div>
+        </div>
+      </div>
+
+      <!-- Member list -->
+      <div class="section-label" style="margin-bottom:8px;">Group Members</div>
+      <div id="chatMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+        <!-- Member rows injected by addChatMember() -->
+      </div>
+      <button type="button" onclick="addChatMember()" style="font-size:0.72rem;padding:5px 12px;margin-bottom:12px;">
+        + Add Member
+      </button>
+      <div class="hint" style="margin-bottom:12px;">
+        The sender is automatically included as uid0 and as a group member. Add all other recipients here.<br/>
+        Member UIDs populate <code>uid1</code>, <code>uid2</code>, etc. in <code>&lt;chatgrp&gt;</code> and the <code>&lt;hierarchy&gt;</code> tree.
+      </div>
+    </div>
+
+    <!-- ── TEAM COLOR FIELDS ── -->
+    <div id="chatTeamFields" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom / id</span> Team Color</label>
+          <select id="chatTeamColor" onchange="buildChatXml()">
+            <option value="Cyan">Cyan</option>
+            <option value="Blue">Blue</option>
+            <option value="Red">Red</option>
+            <option value="Green">Green</option>
+            <option value="Yellow">Yellow</option>
+            <option value="White">White</option>
+            <option value="Purple">Purple</option>
+            <option value="Maroon">Maroon</option>
+          </select>
+          <div class="hint">All ATAK devices with this <code>__group name</code> will receive the message. Membership is implicit — no roster needed.</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Additional Recipients (optional)</label>
+          <div id="chatTeamMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+          <button type="button" onclick="addTeamMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+          <div class="hint" style="margin-top:4px;">Adds <code>uid1</code>, <code>uid2</code>, etc. to <code>&lt;chatgrp&gt;</code>. Leave empty to broadcast to the team color only.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ROLE BROADCAST FIELDS ── -->
+    <div id="chatRoleFields" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom / id</span> Role</label>
+          <select id="chatRoleName" onchange="onRoleSelectChange()">
+            <option value="HQ">HQ</option>
+            <option value="Team Member">Team Member</option>
+            <option value="Team Lead">Team Lead</option>
+            <option value="Sniper">Sniper</option>
+            <option value="Medic">Medic</option>
+            <option value="Forward Observer">Forward Observer</option>
+            <option value="RTO">RTO</option>
+            <option value="K9">K9</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="text" id="chatRoleCustom" placeholder="Custom role name"
+                 style="display:none;margin-top:6px;"
+                 oninput="buildChatXml()" onchange="buildChatXml()"/>
+          <div class="hint">
+            All devices with this role will receive the message. Uses <code>parent=RootContactGroup</code>
+            with the role name as both <code>chatroom</code> and <code>id</code>.
+          </div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Recipients <span style="color:#6e7681;font-size:0.7rem;">(uid1, uid2, …)</span></label>
+          <div id="chatRoleMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+          <button type="button" onclick="addRoleMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+          <div class="hint" style="margin-top:4px;">
+            TAK server uses the explicit UID list to route the message. Add all devices that hold this role.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GLOBAL BROADCAST FIELDS ── -->
+    <div id="chatAllFields" style="display:none;">
+      <div style="background:#2d1b1b;border:1px solid #f8514966;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;color:#ffa198;line-height:1.6;">
+        ⚠️ <strong>Global broadcast</strong> — delivers to <em>all</em> connected devices on the TAK server.<br/>
+        Uses the reserved literal <code style="color:#ff7b72;">"All Chat Rooms"</code> as both <code>chatroom</code>, <code>id</code>, and <code>uid1</code>.<br/>
+        No recipient list needed — the TAK server handles delivery.
+      </div>
+    </div>
+
+    <!-- ── ALL GROUPS BROADCAST FIELDS ── -->
+    <div id="chatAllGroupsFields" style="display:none;">
+      <div style="background:#2d2218;border:1px solid #f0883e66;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;color:#ffa657;line-height:1.6;">
+        🟠 <strong>All Groups broadcast</strong> — delivers to all members of all user-created groups.<br/>
+        Uses reserved <code style="color:#ff7b72;">id="UserGroups"</code> with <code>chatroom="Groups"</code> (note: these differ).<br/>
+        Unlike All Chat Rooms, recipients must still be enumerated explicitly in <code>&lt;chatgrp&gt;</code>.
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Recipients <span style="color:#6e7681;font-size:0.7rem;">(uid1, uid2, …)</span></label>
+        <div id="chatAllGroupsMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+        <button type="button" onclick="addAllGroupsMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+        <div class="hint" style="margin-top:4px;">Add each recipient device UID. The TAK server will deliver to all listed devices.</div>
+      </div>
+    </div>
+
+    <!-- ── ALL TEAMS BROADCAST FIELDS ── -->
+    <div id="chatAllTeamsFields" style="display:none;">
+      <div style="background:#182d1d;border:1px solid #3fb95066;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;color:#7ee787;line-height:1.6;">
+        🟢 <strong>All Teams broadcast</strong> — delivers to all members of all team color groups.<br/>
+        Uses reserved <code style="color:#ff7b72;">id="TeamGroups"</code> with <code>chatroom="Teams"</code> (note: these differ).<br/>
+        Robots assigned to a team color (e.g. <code>warthog1</code>) will appear as recipients.
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Recipients <span style="color:#6e7681;font-size:0.7rem;">(uid1, uid2, …)</span></label>
+        <div id="chatAllTeamsMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+        <button type="button" onclick="addAllTeamsMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+        <div class="hint" style="margin-top:4px;">Include all team color members — ATAK devices and robots alike.</div>
+      </div>
+    </div>
+
+    <!-- Server destination (all modes) -->
+    <div class="field" style="margin-bottom:12px;">
+      <label><span class="tag">__serverdestination</span> Server Destination (optional)</label>
+      <input type="text" id="chatServerDest" placeholder="10.10.10.x:4242:tcp:your-device-uid"/>
+      <div class="hint">Sender's return address on the TAK network. Leave blank for direct peer-to-peer.</div>
+    </div>
+
+    <div class="field" style="margin-top:12px;">
+      <label><span class="tag">remarks</span> Message Text <span class="required">required</span></label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="chatMessage" placeholder="Hello Warthog, begin recon pattern" style="flex:1;font-size:0.85rem;"/>
+        <button class="primary" onclick="sendChatMessage()" style="padding:8px 16px;white-space:nowrap;">▶ Send Chat</button>
+        <button onclick="copyChatMessage()" style="padding:8px 14px;white-space:nowrap;">⎘ Copy XML</button>
+      </div>
+    </div>
+
+    <div id="chatPreview" style="margin-top:10px;">
+      <div class="section-label">Generated XML Preview</div>
+      <pre id="chatPreviewXml" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:10px;font-size:0.68rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:250px;overflow-y:auto;color:#6e7681;font-style:italic;">Fill in the fields above to see the generated CoT XML...</pre>
+    </div>
+
+    <div class="hint" style="margin-top:10px;">
+      The sender position (<code>lat/lon</code>) is taken from the position fields in the form above, or defaults to <code>0,0</code> if empty. The message UUID in the UID and <code>messageId</code> is freshly generated on every send.
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ PRESETS -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">📋 Preset CoT Examples — Send Raw XML Directly</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      These presets bypass the form fields — timestamps are set to now at send time. Click a preset to preview it, then send it directly or copy it.
+    </div>
+
+    <!-- Preset cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
+
+      <div class="preset-card" onclick="selectPreset('friendly_ground_marker')" id="card-friendly_ground_marker">
+        <div class="preset-card-title">🟦 Friendly Ground Marker</div>
+        <div class="preset-card-type">a-f-G</div>
+        <div class="preset-card-desc">Manually placed friendly ground position marker with archive, link, and creator. Typical ATAK long-press drop-pin.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('sa_beacon')" id="card-sa_beacon">
+        <div class="preset-card-title">📍 SA Beacon (Infantry)</div>
+        <div class="preset-card-type">a-f-G-U-C</div>
+        <div class="preset-card-desc">Situational awareness beacon from a human ATAK user. The most common CoT message type on a TAK network.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('ugv_position')" id="card-ugv_position">
+        <div class="preset-card-title">🤖 UGV Position Report</div>
+        <div class="preset-card-type">a-f-G-U-C-R</div>
+        <div class="preset-card-desc">Autonomous ground robot classified as Combat Reconnaissance — represents role/function (mobile camera recon) not platform type. Verified from ATAK.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('uav_position')" id="card-uav_position">
+        <div class="preset-card-title">🚁 UAV — Rotary Wing (Anafi)</div>
+        <div class="preset-card-type">a-f-G-U-C-V-U-R</div>
+        <div class="preset-card-desc">Quadcopter/rotary UAV as ground unit organic asset. Correct classification for Parrot Anafi. Verified from ATAK.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('uav_generic')" id="card-uav_generic">
+        <div class="preset-card-title">🚁 UAV — Generic</div>
+        <div class="preset-card-type">a-f-G-U-C-V-U</div>
+        <div class="preset-card-desc">Generic unmanned aerial vehicle, wing type unspecified. Use when platform type is unknown. Verified from ATAK.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('uav_fixed_wing')" id="card-uav_fixed_wing">
+        <div class="preset-card-title">✈️ UAV — Fixed Wing</div>
+        <div class="preset-card-type">a-f-G-U-C-V-U-F</div>
+        <div class="preset-card-desc">Fixed wing UAV as ground unit organic asset. Verified from ATAK.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('uav_air_rpv')" id="card-uav_air_rpv">
+        <div class="preset-card-title">🚁 UAV — Rotary RPV (Air)</div>
+        <div class="preset-card-type">a-f-A-M-H-Q</div>
+        <div class="preset-card-desc">Rotary drone under Air dimension. Use when operating around manned aviation / ATC environments. Verified from ATAK.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('hostile_vehicle')" id="card-hostile_vehicle">
+        <div class="preset-card-title">🟥 Hostile Vehicle</div>
+        <div class="preset-card-type">a-h-G-E-V</div>
+        <div class="preset-card-desc">Hostile ground vehicle marker manually placed on map by an operator.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('chat_direct')" id="card-chat_direct">
+        <div class="preset-card-title">💬 GeoChat Direct Message</div>
+        <div class="preset-card-type">b-t-f</div>
+        <div class="preset-card-desc">TAK direct message from operator to robot. Edit the remarks text to change the message content. Message UUID is regenerated each send.</div>
+      </div>
+
+      <div class="preset-card" onclick="selectPreset('unknown_ground')" id="card-unknown_ground">
+        <div class="preset-card-title">❓ Unknown Ground Contact</div>
+        <div class="preset-card-type">a-u-G</div>
+        <div class="preset-card-desc">Unknown ground contact — unidentified entity, pending classification.</div>
+      </div>
+
+    </div>
+
+    <!-- Preview + send area (hidden until a preset is selected) -->
+    <div id="presetPreviewArea" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;">
+        <div>
+          <div class="section-label" id="presetPreviewLabel">Preview</div>
+          <pre id="presetPreviewXml" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:12px;font-size:0.72rem;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;"></pre>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:22px;min-width:130px;">
+          <button class="primary" onclick="sendPreset()" style="padding:8px 14px;font-size:0.8rem;">▶ Send Preset</button>
+          <button onclick="copyPreset()" style="padding:8px 14px;font-size:0.8rem;">⎘ Copy XML</button>
+          <button onclick="loadPresetIntoForm()" style="padding:8px 14px;font-size:0.8rem;" title="Load preset values into the form fields above">↑ Load into Form</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px;">Timestamps (<code>time</code>, <code>start</code>, <code>stale</code>) are regenerated fresh at the moment you click Send.</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ OUTPUT -->
+  <div class="output-panel">
+    <div class="output-header">
+      <span>Generated CoT XML</span>
+      <div class="btn-group">
+        <button onclick="generateXML()">↺ Regenerate</button>
+        <button onclick="copyXML()">⎘ Copy XML</button>
+        <button class="primary" onclick="downloadXML()">↓ Download .xml</button>
+      </div>
+    </div>
+    <pre id="output">Click "Regenerate" or fill in the fields above...</pre>
+  </div>
+
+</div>
+
+<div class="toast" id="toast">✓ Copied to clipboard</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// TYPE HIERARCHY HELPER
+// ══════════════════════════════════════════════════════════════════
+
+const TYPE_DEFS = {
+  // Atom (a)
+  'a': 'Atom (real-world entity)',
+  'b': 'Bit (data/information)',
+  't': 'Task/Tasking',
+  'r': 'Reply',
+  // Affiliation
+  'f': 'Friendly',
+  'h': 'Hostile',
+  'n': 'Neutral',
+  'u': 'Unknown',
+  'a_aff': 'Assumed Friendly',
+  's': 'Suspect',
+  'j': 'Joker',
+  'k': 'Faker',
+  // Battle Dimension (Ground)
+  'G': 'Ground',
+  'A': 'Air',
+  'S': 'Sea Surface',
+  'U': 'Sea Subsurface',
+  'F': 'SOF (Special Operations Forces)',
+  'X': 'Other',
+  // Category
+  'U': 'Unit (human)',
+  'E': 'Equipment',
+  'I': 'Installation',
+  'M': 'Machine/Equipment',
+  // Sub
+  'C': 'Combat Arms',
+  'V': 'Vehicle',
+  'F_sub': 'Unmanned/Fixed-Wing',
+  'Q': 'Unmanned/Robot',
+  'R': 'Rotary Wing',
+};
+
+function updateTypeHelper() {
+  const val = document.getElementById('type').value.trim();
+  const helper = document.getElementById('typeHelper');
+  if (!val) {
+    helper.innerHTML = '<div class="type-tree">Type a CoT type string above to see breakdown</div>';
+    return;
+  }
+
+  const parts = val.split('-');
+  const descs = [
+    { part: parts[0], meanings: { 'a': 'Atom (real entity)', 'b': 'Bit (data)', 't': 'Task', 'r': 'Reply' } },
+    { part: parts[1], meanings: { 'f': '🟦 Friendly', 'h': '🟥 Hostile', 'n': '⬜ Neutral', 'u': '❓ Unknown', 's': '🟡 Suspect' } },
+    { part: parts[2], meanings: { 'G': '🚶 Ground', 'A': '✈️ Air', 'S': '🚢 Sea Surface', 'U': '🤿 Subsurface', 'F': '🎖️ SOF' } },
+    { part: parts[3], meanings: { 'U': 'Unit (human)', 'E': 'Equipment', 'I': 'Installation', 'M': 'Machine', 'G': 'Group' } },
+    { part: parts[4], meanings: { 'C': 'Combat Arms', 'V': 'Vehicle', 'F': 'Unmanned/Fixed-Wing', 'R': 'Rotary Wing', 'S': 'Support', 'H': 'Helicopter/Rotary', 'Q': 'Robot/Drone' } },
+    { part: parts[5], meanings: { 'U': 'Unmanned', 'I': 'Individual', 'F': 'Leader', 'A': 'Aviation', 'Q': 'Robot/UGV', 'V': 'Vehicle/UAV family' } },
+    { part: parts[6], meanings: { 'U': 'Unmanned Aerial Vehicle', 'F': 'Fixed Wing', 'R': 'Rotary Wing', 'Q': 'Drone (RPV)' } },
+    { part: parts[7], meanings: { 'R': 'Rotary Wing', 'F': 'Fixed Wing', 'Q': 'Drone' } },
+  ];
+
+  const labels = ['Atom', 'Affiliation', 'Dimension', 'Category', 'Sub-Cat', 'Sub-Sub-Cat', 'Modifier 1', 'Modifier 2'];
+
+  let html = '<div class="type-tree">';
+  descs.forEach((d, i) => {
+    if (!d.part) return;
+    const meaning = d.meanings[d.part] || d.part;
+    html += `<span style="color:#6e7681">${labels[i]}: </span><span>${d.part}</span><span style="color:#8b949e"> = ${meaning}</span><br/>`;
+  });
+  html += '</div>';
+  helper.innerHTML = html;
+}
+
+function applyTypePreset() {
+  const val = document.getElementById('typePreset').value;
+  if (!val) return;
+  document.getElementById('type').value = val;
+  document.getElementById('typePreset').value = '';
+  updateTypeHelper();
+}
+
+function applyPlatformPreset() {
+  const presets = {
+    'atak_android': { device: 'SAMSUNG SM-G736U1', platform: 'ATAK', os: '36', version: '5.6.0.12' },
+    'wintak':       { device: 'Windows Laptop',    platform: 'WinTAK', os: 'Windows 11', version: '4.10.0.0' },
+    'pytak_robot':  { device: 'RRC Robot',         platform: 'Pytak-Client', os: 'Ubuntu 24.04', version: '5.3.0.155' },
+    'pytak_drone':  { device: 'Parrot Anafi',      platform: 'Pytak-Client', os: 'Ubuntu 24.04', version: '5.3.0.155' },
+  };
+  const p = presets[document.getElementById('platformPreset').value];
+  if (!p) return;
+  document.getElementById('takvDevice').value   = p.device;
+  document.getElementById('takvPlatform').value = p.platform;
+  document.getElementById('takvOs').value       = p.os;
+  document.getElementById('takvVersion').value  = p.version;
+  document.getElementById('platformPreset').value = '';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UID & CALLSIGN GENERATORS
+// ══════════════════════════════════════════════════════════════════
+
+function generateUID() {
+  document.getElementById('uid').value = genUuid();
+  generateXML();
+}
+
+function generateCallsign() {
+  // NATO phonetic alphabet + number combos, common TAK callsign patterns
+  const words = [
+    'ALPHA','BRAVO','CHARLIE','DELTA','ECHO','FOXTROT','GOLF','HOTEL',
+    'INDIA','JULIET','KILO','LIMA','MIKE','NOVEMBER','OSCAR','PAPA',
+    'QUEBEC','ROMEO','SIERRA','TANGO','UNIFORM','VICTOR','WHISKEY',
+    'XRAY','YANKEE','ZULU'
+  ];
+  const suffixes = ['1','2','3','4','6','7','ACTUAL','BASE','LEAD','MIKE','NINER'];
+  const word   = words[Math.floor(Math.random() * words.length)];
+  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+  document.getElementById('callsign').value = `${word}-${suffix}`;
+  generateXML();
+}
+
+
+
+function toggleSection(id, checkbox) {
+  const el = document.getElementById(id);
+  el.classList.toggle('active', checkbox.checked);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// XML GENERATION
+// ══════════════════════════════════════════════════════════════════
+
+function nowISO() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function staleISO(mins) {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + (parseInt(mins) || 5));
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function generateXML() {
+  const uid        = document.getElementById('uid').value.trim()        || 'FILL-UID-HERE';
+  const callsign   = document.getElementById('callsign').value.trim()   || 'CALLSIGN';
+  const type       = document.getElementById('type').value.trim()       || 'a-f-G-U-C';
+  const how        = document.getElementById('how').value;
+  const staleMins  = document.getElementById('staleMins').value;
+  const lat        = document.getElementById('lat').value               || '0.0';
+  const lon        = document.getElementById('lon').value               || '0.0';
+  const hae        = document.getElementById('hae').value               || '0';
+  const ce         = document.getElementById('ce').value                || '9999999.0';
+  const le         = document.getElementById('le').value                || '9999999.0';
+  const groupColor = document.getElementById('groupColor').value;
+  const groupRole  = document.getElementById('groupRole').value;
+  const speed      = document.getElementById('speed').value             || '0.0';
+  const course     = document.getElementById('course').value            || '0.0';
+  const device     = document.getElementById('takvDevice').value.trim();
+  const platform   = document.getElementById('takvPlatform').value.trim();
+  const os         = document.getElementById('takvOs').value.trim();
+  const version    = document.getElementById('takvVersion').value.trim();
+  const battery    = document.getElementById('battery').value           || '100';
+  const endpoint   = document.getElementById('endpoint').value.trim()   || '*:-1:stcp';
+
+  // Toggle states
+  const includeTrack   = document.getElementById('enableTrack').checked;
+  const includeBattery = document.getElementById('enableBattery').checked;
+
+  const now   = nowISO();
+  const stale = staleISO(staleMins);
+
+  let detail = '';
+
+  detail += `    <contact callsign="${callsign}" endpoint="${endpoint}"/>\n`;
+  detail += `    <__group name="${groupColor}" role="${groupRole}"/>\n`;
+  detail += `    <uid Droid="${callsign}"/>\n`;
+
+  if (device || platform || os || version) {
+    detail += `    <takv device="${device}" platform="${platform}" os="${os}" version="${version}"/>\n`;
+  }
+
+  if (includeTrack) {
+    detail += `    <track speed="${speed}" course="${course}"/>\n`;
+  }
+
+  if (includeBattery) {
+    detail += `    <status battery="${battery}"/>\n`;
+  }
+
+  if (document.getElementById('enablePrecision').checked) {
+    const gps = document.getElementById('geopointsrc').value;
+    const alt = document.getElementById('altsrc').value;
+    detail += `    <precisionlocation geopointsrc="${gps}" altsrc="${alt}"/>\n`;
+  }
+
+  if (document.getElementById('enableArchive').checked) {
+    detail += `    <archive/>\n`;
+  }
+
+  if (document.getElementById('enableMilsym').checked) {
+    const sym = document.getElementById('milsymId').value.trim();
+    detail += `    <__milicon id="${sym}"/>\n`;
+    detail += `    <__milsym id="${sym}"/>\n`;
+  }
+
+  if (document.getElementById('enableLink').checked) {
+    const luid      = document.getElementById('linkUid').value.trim();
+    const lcall     = document.getElementById('linkCallsign').value.trim();
+    const lrel      = document.getElementById('linkRelation').value;
+    const ltype     = document.getElementById('linkType').value.trim();
+    detail += `    <link uid="${luid}" production_time="${now}" type="${ltype}" parent_callsign="${lcall}" relation="${lrel}"/>\n`;
+    detail += `    <creator uid="${luid}" callsign="${lcall}" time="${now}" type="${ltype}"/>\n`;
+  }
+
+  if (document.getElementById('enableRemarks').checked) {
+    const remarks = document.getElementById('remarks').value;
+    detail += `    <remarks>${remarks}</remarks>\n`;
+  }
+
+  const xml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="${uid}"
+       type="${type}"
+       how="${how}"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="${lat}"
+         lon="${lon}"
+         hae="${hae}"
+         ce="${ce}"
+         le="${le}"/>
+  <detail>
+${detail}  </detail>
+</event>`;
+
+  document.getElementById('output').textContent = xml;
+}
+
+function copyXML() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+
+function downloadXML() {
+  const text = document.getElementById('output').textContent;
+  const blob = new Blob([text], { type: 'application/xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const uid = document.getElementById('uid').value.trim() || 'cot_message';
+  a.download = `cot_${uid.replace(/[^a-zA-Z0-9_-]/g,'_')}.xml`;
+  a.click();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAK SERVER — SEND CoT
+// ══════════════════════════════════════════════════════════════════
+
+let repeatTimer    = null;   // setInterval handle for repeat mode
+let repeatCount    = 0;      // number of successful sends in current repeat session
+
+function applyProxyShortcut() {
+  const port = document.getElementById('proxyPort').value.trim();
+  if (!port) return;
+  // Fill the full URL and path fields with local proxy defaults
+  document.getElementById('takServerUrl').value = `http://localhost:${port}`;
+  document.getElementById('takApiPath').value   = '/send';
+  updateEndpointPreview();
+}
+
+function updateEndpointPreview() {
+  const base = document.getElementById('takServerUrl').value.trim().replace(/\/$/, '');
+  const path = document.getElementById('takApiPath').value.trim();
+  document.getElementById('endpointPreview').textContent = base && path ? `${base}${path}` : '—';
+}
+
+function updateAuthFields() {
+  const t = document.getElementById('takAuthType').value;
+  document.getElementById('authBasicFields').style.display = t === 'basic'  ? 'block' : 'none';
+  document.getElementById('authTokenField').style.display  = t === 'apikey' ? 'block' : 'none';
+}
+
+function updateRepeatUI() {
+  const repeat = document.getElementById('takRepeatMode').value === 'repeat';
+  document.getElementById('takIntervalField').style.display = repeat ? 'block' : 'none';
+}
+
+function buildHeaders() {
+  const headers = { 'Content-Type': 'application/xml' };
+  const authType = document.getElementById('takAuthType').value;
+
+  if (authType === 'basic') {
+    const user = document.getElementById('takUser').value;
+    const pass = document.getElementById('takPass').value;
+    headers['Authorization'] = 'Basic ' + btoa(`${user}:${pass}`);
+  } else if (authType === 'apikey') {
+    const token = document.getElementById('takToken').value.trim();
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+function setStatus(state, message, code) {
+  // state: 'sending' | 'ok' | 'error' | 'warn'
+  const colors  = { sending: '#58a6ff', ok: '#3fb950', error: '#f85149', warn: '#d29922' };
+  const icons   = { sending: '◌',       ok: '●',       error: '●',       warn: '▲'      };
+  const bgMap   = { sending: '#0d1117', ok: '#0d1117', error: '#0d1117', warn: '#0d1117' };
+
+  const box  = document.getElementById('takStatusBox');
+  const bar  = document.getElementById('takStatusBar');
+  const icon = document.getElementById('takStatusIcon');
+  const text = document.getElementById('takStatusText');
+  const codeEl = document.getElementById('takStatusCode');
+
+  box.style.display          = 'block';
+  bar.style.borderLeft       = `3px solid ${colors[state]}`;
+  icon.style.color           = colors[state];
+  icon.textContent           = icons[state];
+  text.textContent           = message;
+  codeEl.textContent         = code ? `HTTP ${code}` : '';
+}
+
+function appendLog(message, level) {
+  // level: 'info' | 'ok' | 'error' | 'warn'
+  const levelColors = { info: '#6e7681', ok: '#3fb950', error: '#f85149', warn: '#d29922' };
+  const log = document.getElementById('takLog');
+  const ts  = new Date().toISOString().substring(11, 23); // HH:MM:SS.mmm
+  const div = document.createElement('div');
+  div.style.color = levelColors[level] || '#6e7681';
+  div.textContent = `[${ts}] ${message}`;
+  // Remove placeholder text on first real entry
+  if (log.querySelector('span')) log.innerHTML = '';
+  log.appendChild(div);
+  // Auto-scroll to bottom
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('takLog').innerHTML = '<span style="color:#444;">Log cleared.</span>';
+}
+
+async function doSend() {
+  // Always regenerate to get fresh timestamps before sending
+  generateXML();
+  const xml = document.getElementById('output').textContent;
+
+  const base = document.getElementById('takServerUrl').value.trim().replace(/\/$/, '');
+  const path = document.getElementById('takApiPath').value.trim();
+
+  if (!base) {
+    setStatus('error', 'No server URL entered.');
+    appendLog('ERROR: Server URL is empty.', 'error');
+    return;
+  }
+
+  const url = `${base}${path}`;
+  setStatus('sending', `Sending to ${url}…`);
+  appendLog(`POST ${url}`, 'info');
+
+  try {
+    const fetchOpts = {
+      method:  'POST',
+      headers: buildHeaders(),
+      body:    xml,
+      // Note: browsers ignore 'rejectUnauthorized' — TLS errors must be
+      // handled by accepting the certificate in the browser first.
+    };
+
+    const resp = await fetch(url, fetchOpts);
+
+    if (resp.ok) {
+      const bodyText = await resp.text().catch(() => '');
+      setStatus('ok', `Message delivered successfully.`, resp.status);
+      appendLog(`✓ ${resp.status} ${resp.statusText}${bodyText ? ' — ' + bodyText.substring(0, 80) : ''}`, 'ok');
+      return true;
+    } else {
+      const bodyText = await resp.text().catch(() => '');
+      setStatus('error', `Server returned an error.`, resp.status);
+      appendLog(`✗ ${resp.status} ${resp.statusText}${bodyText ? ' — ' + bodyText.substring(0, 120) : ''}`, 'error');
+      return false;
+    }
+
+  } catch (err) {
+    // Network errors (CORS, connection refused, TLS failure) land here
+    const isCors = err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'));
+    if (isCors) {
+      setStatus('error', 'Network error — likely CORS or TLS. See log.');
+      appendLog(`✗ Network error: ${err.message}`, 'error');
+      appendLog('  → If self-signed cert: open server URL in browser tab and accept the warning, then retry.', 'warn');
+      appendLog('  → If CORS blocked: TAK server needs Access-Control-Allow-Origin header, or use a local proxy.', 'warn');
+    } else {
+      setStatus('error', `Request failed: ${err.message}`);
+      appendLog(`✗ Exception: ${err.message}`, 'error');
+    }
+    return false;
+  }
+}
+
+async function sendCoT() {
+  const mode = document.getElementById('takRepeatMode').value;
+
+  // Stop any existing repeat session
+  stopRepeat();
+
+  if (mode === 'once') {
+    await doSend();
+  } else {
+    // Repeat mode — send immediately, then on interval
+    const intervalSec = Math.max(1, parseInt(document.getElementById('takInterval').value) || 10);
+    repeatCount = 0;
+
+    document.getElementById('btnStop').style.display          = 'inline-block';
+    document.getElementById('repeatCounterBadge').style.display = 'flex';
+    document.getElementById('btnSend').textContent             = '▶ Sending…';
+    document.getElementById('btnSend').disabled                = true;
+
+    appendLog(`▶ Repeat mode started — every ${intervalSec}s`, 'info');
+
+    // First send immediately
+    const ok = await doSend();
+    if (ok) { repeatCount++; document.getElementById('repeatCounter').textContent = repeatCount; }
+
+    repeatTimer = setInterval(async () => {
+      const ok = await doSend();
+      if (ok) { repeatCount++; document.getElementById('repeatCounter').textContent = repeatCount; }
+    }, intervalSec * 1000);
+  }
+}
+
+function stopRepeat() {
+  if (repeatTimer) {
+    clearInterval(repeatTimer);
+    repeatTimer = null;
+    appendLog(`■ Repeat stopped. Total sent: ${repeatCount}`, 'info');
+  }
+  document.getElementById('btnStop').style.display            = 'none';
+  document.getElementById('repeatCounterBadge').style.display = 'none';
+  document.getElementById('btnSend').textContent              = '▶ Send CoT';
+  document.getElementById('btnSend').disabled                 = false;
+  repeatCount = 0;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PRESET CoT EXAMPLES
+// ══════════════════════════════════════════════════════════════════
+
+// Preset definitions — templates with {{NOW}}, {{STALE5}}, {{STALE1}} placeholders
+// that get replaced with real ISO timestamps at render/send time.
+// UIDs are stable example values (not real device UIDs).
+
+const PRESETS = {
+
+  // ── Friendly Ground Marker (manually placed, archive, link, creator) ──────
+  // Based on the a-f-G map pin message — the most detail-rich marker type.
+  friendly_ground_marker: {
+    label: 'Friendly Ground Marker',
+    staleMins: 5,
+    // Form fields to populate if user clicks "Load into Form"
+    formValues: {
+      uid: 'a1b2c3d4-0001-4000-aaaa-example00001',
+      callsign: 'BRAVO-ACTUAL',
+      type: 'a-f-G',
+      how: 'h-g-i-g-o',
+      lat: '41.3913988', lon: '-73.9531347', hae: '-19.253',
+      ce: '9999999.0', le: '9999999.0',
+      groupColor: 'Cyan', groupRole: 'Team Lead',
+      milsym: 'SFG*------*****',
+    },
+    // Raw XML template — {{NOW}}, {{STALE}} replaced at runtime
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="a1b2c3d4-0001-4000-aaaa-example00001"
+       type="a-f-G"
+       how="h-g-i-g-o"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3913988" lon="-73.9531347" hae="-19.253" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <contact callsign="BRAVO-ACTUAL"/>
+    <status readiness="true"/>
+    <archive/>
+    <link uid="a1b2c3d4-0002-4000-aaaa-example00002"
+          production_time="${now}"
+          type="a-f-G-U-C"
+          parent_callsign="BRAVO-ACTUAL"
+          relation="p-p"/>
+    <remarks/>
+    <color argb="-1"/>
+    <__milicon id="SFG*------*****"/>
+    <__milsym id="SFG*------*****"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-f/a-f-G"/>
+    <precisionlocation altsrc="SRTM1"/>
+    <creator uid="a1b2c3d4-0002-4000-aaaa-example00002"
+             callsign="BRAVO-ACTUAL"
+             time="${now}"
+             type="a-f-G-U-C"/>
+  </detail>
+</event>`,
+  },
+
+  // ── SA Beacon — Human Infantry ───────────────────────────────────────────
+  sa_beacon: {
+    label: 'SA Beacon (Infantry)',
+    staleMins: 6,
+    formValues: {
+      uid: 'ANDROID-example0000000001',
+      callsign: 'FOXTROT-6',
+      type: 'a-f-G-U-C',
+      how: 'h-e',
+      lat: '41.3912267', lon: '-73.9527021', hae: '-32.2',
+      ce: '9999999.0', le: '9999999.0',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed: '0.0', course: '180.0',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="ANDROID-example0000000001"
+       type="a-f-G-U-C"
+       how="h-e"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3912267" lon="-73.9527021" hae="-32.2" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <contact callsign="FOXTROT-6" endpoint="*:-1:stcp"/>
+    <__group name="Cyan" role="Team Member"/>
+    <uid Droid="FOXTROT-6"/>
+    <takv device="SAMSUNG SM-G736U1" platform="ATAK" os="36" version="5.6.0.12"/>
+    <track speed="0.0" course="180.0"/>
+    <status battery="85"/>
+    <precisionlocation geopointsrc="USER" altsrc="SRTM1"/>
+  </detail>
+</event>`,
+  },
+
+  // ── UGV Position Report ───────────────────────────────────────────────────
+  // type a-f-G-U-C-R (Friendly Ground Unit Combat Reconnaissance) confirmed
+  // from ATAK. UGV classified as Recon rather than Equipment because:
+  //   - 2525C symbols represent battlefield ROLE/FUNCTION, not platform type
+  //   - ATAK has no unmanned ground vehicle symbol
+  //   - Warthog mission is mobile camera-based reconnaissance and surveillance
+  // milsym SFG*UCR---***** confirmed from ATAK stream.
+  // Speed >= 1.4 m/s required for ATAK orientation arrow to render.
+  ugv_position: {
+    label: 'UGV Position Report (Combat Recon)',
+    staleMins: 1,
+    formValues: {
+      uid: 'ugv-warthog-example-serial-001',
+      callsign: 'WARTHOG-1',
+      type: 'a-f-G-U-C-R',
+      how: 'm-g',
+      lat: '41.391145', lon: '-73.953182', hae: '0',
+      ce: '10', le: '10',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed: '1.5', course: '90.0',
+      milsym: 'SFG*UCR---*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="ugv-warthog-example-serial-001"
+       type="a-f-G-U-C-R"
+       how="m-g"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.391145" lon="-73.953182" hae="0" ce="10" le="10"/>
+  <detail>
+    <contact callsign="WARTHOG-1" endpoint="*:-1:stcp"/>
+    <__group name="Cyan" role="Team Member"/>
+    <uid Droid="WARTHOG-1"/>
+    <takv device="RRC Robot" platform="Pytak-Client" os="Ubuntu 24.04" version="5.3.0.155"/>
+    <track speed="1.5" course="90.0"/>
+    <status battery="75"/>
+    <!-- NOTE: ATAK orientation arrow requires speed >= 1.4 m/s to render.
+         1.5 m/s used here to stay just above the threshold. Set to 0.0 if
+         the robot is stationary and you don't want the arrow. -->
+    <__milicon id="SFG*UCR---*****"/>
+    <__milsym id="SFG*UCR---*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-f/a-f-G"/>
+  </detail>
+</event>`,
+  },
+
+  // ── UAV — Rotary Wing / Quadcopter (Ground classification) ──────────────
+  // type a-f-G-U-C-V-U-R confirmed from ATAK "UAV > Rotary Wing" symbol.
+  // Ground classification used because small UAS (Group 1-2) are treated as
+  // ground unit organic equipment in doctrine (no ATC interaction, no flight plan).
+  // Parrot Anafi is a quadcopter — rotary wing is the correct subtype.
+  uav_position: {
+    label: 'UAV — Rotary Wing (Anafi / Quadcopter)',
+    staleMins: 1,
+    formValues: {
+      uid: 'uav-anafi-example-serial-001',
+      callsign: 'EAGLE-1',
+      type: 'a-f-G-U-C-V-U-R',
+      how: 'm-g',
+      lat: '41.3920000', lon: '-73.9520000', hae: '50.0',
+      ce: '5', le: '5',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed: '5.0', course: '270.0',
+      milsym: 'SFG*UCVUR-*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="uav-anafi-example-serial-001"
+       type="a-f-G-U-C-V-U-R"
+       how="m-g"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3920000" lon="-73.9520000" hae="50.0" ce="5" le="5"/>
+  <detail>
+    <contact callsign="EAGLE-1" endpoint="*:-1:stcp"/>
+    <__group name="Cyan" role="Team Member"/>
+    <uid Droid="EAGLE-1"/>
+    <takv device="Parrot Anafi" platform="Pytak-Client" os="Ubuntu 24.04" version="5.3.0.155"/>
+    <track speed="5.0" course="270.0"/>
+    <status battery="60"/>
+    <__milicon id="SFG*UCVUR-*****"/>
+    <__milsym id="SFG*UCVUR-*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-f/a-f-G-E-V"/>
+  </detail>
+</event>`,
+  },
+
+  // ── UAV — Generic Unmanned Aerial Vehicle (Ground classification) ────────
+  // type a-f-G-U-C-V-U confirmed from ATAK "Aviation > Unmanned Aerial Vehicle".
+  // Use when wing type is unknown or irrelevant.
+  uav_generic: {
+    label: 'UAV — Generic Unmanned Aerial Vehicle',
+    staleMins: 1,
+    formValues: {
+      uid: 'uav-generic-example-serial-001',
+      callsign: 'UAV-1',
+      type: 'a-f-G-U-C-V-U',
+      how: 'm-g',
+      lat: '41.3920000', lon: '-73.9520000', hae: '50.0',
+      ce: '5', le: '5',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed: '5.0', course: '0.0',
+      milsym: 'SFG*UCVU--*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="uav-generic-example-serial-001"
+       type="a-f-G-U-C-V-U"
+       how="m-g"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3920000" lon="-73.9520000" hae="50.0" ce="5" le="5"/>
+  <detail>
+    <contact callsign="UAV-1" endpoint="*:-1:stcp"/>
+    <__group name="Cyan" role="Team Member"/>
+    <uid Droid="UAV-1"/>
+    <takv device="UAV" platform="Pytak-Client" os="Ubuntu 24.04" version="5.3.0.155"/>
+    <track speed="5.0" course="0.0"/>
+    <status battery="80"/>
+    <__milicon id="SFG*UCVU--*****"/>
+    <__milsym id="SFG*UCVU--*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-f/a-f-G-E-V"/>
+  </detail>
+</event>`,
+  },
+
+  // ── UAV — Fixed Wing (Ground classification) ─────────────────────────────
+  // type a-f-G-U-C-V-U-F confirmed from ATAK "UAV > Fixed Wing".
+  uav_fixed_wing: {
+    label: 'UAV — Fixed Wing',
+    staleMins: 1,
+    formValues: {
+      uid: 'uav-fixedwing-example-serial-001',
+      callsign: 'HAWK-1',
+      type: 'a-f-G-U-C-V-U-F',
+      how: 'm-g',
+      lat: '41.3920000', lon: '-73.9520000', hae: '100.0',
+      ce: '5', le: '5',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed: '15.0', course: '0.0',
+      milsym: 'SFG*UCVUF-*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="uav-fixedwing-example-serial-001"
+       type="a-f-G-U-C-V-U-F"
+       how="m-g"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3920000" lon="-73.9520000" hae="100.0" ce="5" le="5"/>
+  <detail>
+    <contact callsign="HAWK-1" endpoint="*:-1:stcp"/>
+    <__group name="Cyan" role="Team Member"/>
+    <uid Droid="HAWK-1"/>
+    <takv device="Fixed Wing UAV" platform="Pytak-Client" os="Ubuntu 24.04" version="5.3.0.155"/>
+    <track speed="15.0" course="0.0"/>
+    <status battery="80"/>
+    <__milicon id="SFG*UCVUF-*****"/>
+    <__milsym id="SFG*UCVUF-*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-f/a-f-G-E-V"/>
+  </detail>
+</event>`,
+  },
+
+  // ── UAV — Rotary Wing Drone RPV (Air classification) ─────────────────────
+  // type a-f-A-M-H-Q confirmed from ATAK "Rotary Wing > Drone (RPV UAV)".
+  // Air dimension — use when operating around manned aviation / ATC environments
+  // where airspace deconfliction matters.
+  uav_air_rpv: {
+    label: 'UAV — Rotary Drone RPV (Air classification)',
+    staleMins: 1,
+    formValues: {
+      uid: 'uav-rpv-example-serial-001',
+      callsign: 'RPV-1',
+      type: 'a-f-A-M-H-Q',
+      how: 'm-g',
+      lat: '41.3920000', lon: '-73.9520000', hae: '50.0',
+      ce: '5', le: '5',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed: '5.0', course: '0.0',
+      milsym: 'SFA*MHQ---*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="uav-rpv-example-serial-001"
+       type="a-f-A-M-H-Q"
+       how="m-g"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3920000" lon="-73.9520000" hae="50.0" ce="5" le="5"/>
+  <detail>
+    <contact callsign="RPV-1" endpoint="*:-1:stcp"/>
+    <__group name="Cyan" role="Team Member"/>
+    <uid Droid="RPV-1"/>
+    <takv device="Rotary UAV" platform="Pytak-Client" os="Ubuntu 24.04" version="5.3.0.155"/>
+    <track speed="5.0" course="0.0"/>
+    <status battery="80"/>
+    <__milicon id="SFA*MHQ---*****"/>
+    <__milsym id="SFA*MHQ---*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-f/a-f-G-E-V"/>
+  </detail>
+</event>`,
+  },
+
+  // ── Hostile Ground Vehicle ────────────────────────────────────────────────
+  hostile_vehicle: {
+    label: 'Hostile Vehicle',
+    staleMins: 5,
+    formValues: {
+      uid: 'a1b2c3d4-0010-4000-aaaa-example00010',
+      callsign: 'HOSTILE-VEH-1',
+      type: 'a-h-G-E-V',
+      how: 'h-g-i-g-o',
+      lat: '41.3905000', lon: '-73.9540000', hae: '0',
+      ce: '9999999.0', le: '9999999.0',
+      groupColor: 'Red', groupRole: 'Team Member',
+      milsym: 'SHG*EV----*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="a1b2c3d4-0010-4000-aaaa-example00010"
+       type="a-h-G-E-V"
+       how="h-g-i-g-o"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3905000" lon="-73.9540000" hae="0" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <contact callsign="HOSTILE-VEH-1"/>
+    <__group name="Red" role="Team Member"/>
+    <uid Droid="HOSTILE-VEH-1"/>
+    <track speed="0.0" course="0.0"/>
+    <archive/>
+    <__milicon id="SHG*EV----*****"/>
+    <__milsym id="SHG*EV----*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-h/a-h-G"/>
+    <remarks>Observed hostile vehicle - operator placed</remarks>
+  </detail>
+</event>`,
+  },
+
+  // ── Unknown Ground Contact ────────────────────────────────────────────────
+  unknown_ground: {
+    label: 'Unknown Ground Contact',
+    staleMins: 5,
+    formValues: {
+      uid: 'a1b2c3d4-0020-4000-aaaa-example00020',
+      callsign: 'UNK-CONTACT-1',
+      type: 'a-u-G',
+      how: 'h-g-i-g-o',
+      lat: '41.3908000', lon: '-73.9515000', hae: '0',
+      ce: '9999999.0', le: '9999999.0',
+      groupColor: 'Yellow', groupRole: 'Team Member',
+      milsym: 'SUG*------*****',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="a1b2c3d4-0020-4000-aaaa-example00020"
+       type="a-u-G"
+       how="h-g-i-g-o"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3908000" lon="-73.9515000" hae="0" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <contact callsign="UNK-CONTACT-1"/>
+    <__group name="Yellow" role="Team Member"/>
+    <uid Droid="UNK-CONTACT-1"/>
+    <track speed="0.0" course="0.0"/>
+    <archive/>
+    <__milicon id="SUG*------*****"/>
+    <__milsym id="SUG*------*****"/>
+    <color argb="-1"/>
+    <usericon iconsetpath="COT_MAPPING_2525C/a-u/a-u-G"/>
+    <remarks>Unidentified ground contact - pending classification</remarks>
+  </detail>
+</event>`,
+  },
+
+  // ── GeoChat Direct Message ────────────────────────────────────────────────
+  // type b-t-f (Bit-Task-Force = TAK chat message), confirmed from real ATAK.
+  // UID format: GeoChat.{senderUID}.{recipientChatroom}.{messageUUID}
+  // Key fields:
+  //   <__chat>        — routing metadata (chatroom, sender callsign, messageId)
+  //   <chatgrp>       — uid0=sender, uid1=recipient/chatroom
+  //   <__serverdestination> — delivery address for direct messages
+  //   <remarks>       — the actual message text (source=sender, to=recipient)
+  // stale is set to 24 hours (standard for chat messages).
+  chat_direct: {
+    label: 'GeoChat Direct Message',
+    staleMins: 1440, // 24 hours — standard for TAK chat
+    formValues: null, // Chat messages don't map cleanly to the SA form fields
+    xml: (now, stale) => {
+      const msgUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.ANDROID-example0000000001.warthog1.${msgUuid}"
+       type="b-t-f"
+       how="h-g-i-g-o"
+       time="${now}"
+       start="${now}"
+       stale="${stale}"
+       access="Undefined">
+  <point lat="41.3912267" lon="-73.9527021" hae="-32.2" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="RootContactGroup"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="warthog1"
+            id="warthog1"
+            senderCallsign="FOXTROT-6">
+      <chatgrp uid0="ANDROID-example0000000001"
+               uid1="warthog1"
+               id="warthog1"/>
+    </__chat>
+    <link uid="ANDROID-example0000000001" type="a-f-G-U-C" relation="p-p"/>
+    <remarks source="BAO.F.ATAK.ANDROID-example0000000001"
+             to="warthog1"
+             time="${now}">Hello Warthog, begin recon pattern</remarks>
+  </detail>
+</event>`;
+    },
+  },
+
+};  // end PRESETS
+let selectedPresetKey = null;
+
+function presetNow() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function presetStale(mins) {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + mins);
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function renderPresetXml(key) {
+  const p = PRESETS[key];
+  const now   = presetNow();
+  const stale = presetStale(p.staleMins);
+  return p.xml(now, stale);
+}
+
+function selectPreset(key) {
+  // Deselect previous card
+  if (selectedPresetKey) {
+    document.getElementById(`card-${selectedPresetKey}`).classList.remove('selected');
+  }
+  selectedPresetKey = key;
+  document.getElementById(`card-${key}`).classList.add('selected');
+
+  // Show preview
+  const xml = renderPresetXml(key);
+  document.getElementById('presetPreviewXml').textContent    = xml;
+  document.getElementById('presetPreviewLabel').textContent  = `Preview — ${PRESETS[key].label}`;
+  document.getElementById('presetPreviewArea').style.display = 'block';
+}
+
+async function sendPreset() {
+  if (!selectedPresetKey) return;
+
+  // Regenerate timestamps fresh at send time
+  const xml = renderPresetXml(selectedPresetKey);
+  // Also update the preview so the user sees exactly what was sent
+  document.getElementById('presetPreviewXml').textContent = xml;
+
+  const base = document.getElementById('takServerUrl').value.trim().replace(/\/$/, '');
+  const path = document.getElementById('takApiPath').value.trim();
+
+  if (!base) {
+    appendLog('ERROR: No server URL set. Fill in the TAK Server section above.', 'error');
+    setStatus('error', 'No server URL — fill in the TAK Server section.');
+    return;
+  }
+
+  const url = `${base}${path}`;
+  setStatus('sending', `Sending preset "${PRESETS[selectedPresetKey].label}" to ${url}…`);
+  appendLog(`[PRESET: ${PRESETS[selectedPresetKey].label}] POST ${url}`, 'info');
+
+  try {
+    const resp = await fetch(url, {
+      method:  'POST',
+      headers: { ...buildHeaders(), 'Content-Type': 'application/xml' },
+      body:    xml,
+    });
+
+    if (resp.ok) {
+      setStatus('ok', `Preset delivered.`, resp.status);
+      appendLog(`✓ ${resp.status} ${resp.statusText}`, 'ok');
+    } else {
+      const body = await resp.text().catch(() => '');
+      setStatus('error', `Server returned an error.`, resp.status);
+      appendLog(`✗ ${resp.status} ${resp.statusText} — ${body.substring(0, 120)}`, 'error');
+    }
+  } catch (err) {
+    setStatus('error', `Network error — ${err.message}`);
+    appendLog(`✗ Network error: ${err.message}`, 'error');
+    appendLog('  → Is the proxy running? Check the TAK Server section above.', 'warn');
+  }
+}
+
+function copyPreset() {
+  if (!selectedPresetKey) return;
+  const xml = renderPresetXml(selectedPresetKey);
+  navigator.clipboard.writeText(xml).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+
+function loadPresetIntoForm() {
+  // Populate the main form fields with the preset's values so the user
+  // can then tweak them and use the normal form-based send flow.
+  if (!selectedPresetKey) return;
+  const fv = PRESETS[selectedPresetKey].formValues;
+
+  // Chat messages don't map to the SA form — load into the chat composer instead
+  if (!fv) {
+    // Scroll to and populate the chat composer
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+
+    // The preset XML contains hardcoded values — extract them to pre-fill the composer.
+    // Pull from the rendered XML since that's where the values live.
+    const xml = renderPresetXml(selectedPresetKey);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'application/xml');
+
+    const chatEl   = doc.querySelector('__chat');
+    const chatgrpEl = doc.querySelector('chatgrp');
+    const remarksEl = doc.querySelector('remarks');
+
+    if (chatEl) {
+      set('chatSenderCallsign', chatEl.getAttribute('senderCallsign') || '');
+      set('chatRecipient',      chatEl.getAttribute('chatroom')       || '');
+      set('chatRecipientUid',   chatEl.getAttribute('id')             || '');
+    }
+    if (chatgrpEl) {
+      set('chatSenderUid', chatgrpEl.getAttribute('uid0') || '');
+    }
+    const serverDest = doc.querySelector('__serverdestination')?.getAttribute('destinations') || '';
+    set('chatServerDest', serverDest);
+
+    // Don't overwrite message text — let the user type their own message
+    // set('chatMessage', remarksEl?.textContent?.trim() || '');
+
+    appendLog(`[${PRESETS[selectedPresetKey].label}] Loaded into Chat Composer — enter your message and click Send Chat.`, 'info');
+    setStatus('ok', 'Chat preset loaded into Chat Composer above.');
+
+    // Scroll to chat composer
+    document.getElementById('chatSenderCallsign').closest('.panel').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('chatMessage').focus();
+
+    // Immediately show the XML preview
+    buildChatXml();
+    return;
+  }
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+
+  set('uid',        fv.uid);
+  set('callsign',   fv.callsign);
+  set('type',       fv.type);
+  set('how',        fv.how);
+  set('lat',        fv.lat);
+  set('lon',        fv.lon);
+  set('hae',        fv.hae);
+  set('ce',         fv.ce);
+  set('le',         fv.le);
+  set('groupColor', fv.groupColor);
+  set('groupRole',  fv.groupRole);
+
+  // ── Track (speed/course) ─────────────────────────────────────────
+  // Enable track toggle and populate values if preset defines them.
+  // Speed > 0 is what drives the orientation arrow in ATAK.
+  if (fv.speed !== undefined || fv.course !== undefined) {
+    document.getElementById('enableTrack').checked = true;
+    document.getElementById('trackSection').style.display = 'block';
+    set('speed',  fv.speed  ?? '0.0');
+    set('course', fv.course ?? '0.0');
+  }
+
+  // ── MIL-STD-2525C symbol ─────────────────────────────────────────
+  // Enable the milsym section and populate the code if the preset has one.
+  // Presets without milsym (SA beacons, UAV) leave ATAK to derive the
+  // symbol from the type field — so we disable the toggle for those.
+  const milsymCheckbox = document.getElementById('enableMilsym');
+  const milsymSection  = document.getElementById('milsymSection');
+  if (fv.milsym) {
+    milsymCheckbox.checked      = true;
+    milsymSection.classList.add('active');
+    set('milsymId', fv.milsym);
+  } else {
+    milsymCheckbox.checked = false;
+    milsymSection.classList.remove('active');
+    set('milsymId', '');
+  }
+
+  updateTypeHelper();
+  generateXML();
+
+  // Scroll smoothly up to the form
+  document.querySelector('.layout').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RAW CoT PARSER
+// ══════════════════════════════════════════════════════════════════
+
+// CoT type → human readable description
+function describeType(type) {
+  if (!type) return '';
+  const parts = type.split('-');
+
+  // Lookup tables per position in the type hierarchy
+  const lookup = [
+    // 0 — Atom
+    { 'a': 'Atom (real entity)', 'b': 'Bit (data)', 't': 'Task', 'r': 'Reply' },
+    // 1 — Affiliation
+    { 'f': '🟦 Friendly', 'h': '🟥 Hostile', 'n': '⬜ Neutral', 'u': '❓ Unknown', 's': '🟡 Suspect', 'j': 'Joker', 'k': 'Faker' },
+    // 2 — Battle Dimension
+    { 'G': '🚶 Ground', 'A': '✈️ Air', 'S': '🚢 Sea Surface', 'U': '🤿 Subsurface', 'F': '🎖️ SOF', 'X': 'Other' },
+    // 3 — Category
+    { 'U': 'Unit (human)', 'E': 'Equipment', 'I': 'Installation', 'M': 'Machine', 'G': 'Group' },
+    // 4 — Subcategory
+    { 'C': 'Combat Arms', 'V': 'Vehicle', 'F': 'Unmanned/Fixed-Wing', 'R': 'Rotary Wing', 'S': 'Support', 'H': 'Helicopter/Rotary', 'Q': 'Robot/Drone' },
+    // 5 — Sub-subcategory (e.g. V under Combat Arms = UAV family)
+    { 'U': 'Unmanned', 'I': 'Individual', 'F': 'Leader', 'A': 'Aviation', 'Q': 'Robot/UGV', 'V': 'Vehicle/UAV family' },
+    // 6 — Modifier 1 (e.g. U = Unmanned under UAV family, F/R = wing type)
+    { 'U': 'Unmanned Aerial Vehicle', 'F': 'Fixed Wing', 'R': 'Rotary Wing', 'Q': 'Drone (RPV)' },
+    // 7 — Modifier 2 (e.g. R/F under UAV = specific wing type)
+    { 'R': 'Rotary Wing', 'F': 'Fixed Wing', 'Q': 'Drone' },
+  ];
+
+  // Special multi-part type strings that don't parse through the hierarchy table
+  const specialTypes = {
+    'b-t-f':   'GeoChat direct message',
+    'b-t-f-d': 'GeoChat delivery receipt — message arrived at device (auto-generated)',
+    'b-t-f-r': 'GeoChat read receipt — message opened by user (auto-generated)',
+    't-x-c-t': 'TAK ping / heartbeat',
+    't-x-d-d': 'Delete/Drop — remove linked entity from the common operating picture',
+    't-k':     'TAK keepalive',
+    'b-f-t-r': 'File Transfer Request — peer-to-peer file/data package transfer negotiation',
+  };
+  if (specialTypes[type]) return specialTypes[type];
+  const labels = ['Atom', 'Affiliation', 'Dimension', 'Category', 'Sub-Cat', 'Sub-Sub-Cat', 'Modifier 1', 'Modifier 2'];
+
+  const parts_desc = parts.map((p, i) => {
+    if (!p) return null;
+    const meaning = (lookup[i] && lookup[i][p]) || p;
+    return meaning;
+  }).filter(Boolean);
+
+  return parts_desc.join(' → ');
+}
+
+// How code → human readable
+function describeHow(how) {
+  const map = {
+    'h-e':       'Human entered (typed coordinates)',
+    'h-g-i-g-o': 'Human tapped map (long-press drop pin)',
+    'h-c':       'Human calculated',
+    'm-g':       'Machine GPS (autonomous/robot)',
+    'm-i':       'Machine inferred',
+  };
+  return map[how] || how;
+}
+
+// Seconds until a time string expires (negative = already stale)
+function timeUntil(isoStr) {
+  if (!isoStr) return null;
+  const diff = Math.round((new Date(isoStr) - new Date()) / 1000);
+  if (diff < 0)  return `⚠️ already stale (${Math.abs(diff)}s ago)`;
+  if (diff < 60) return `${diff}s`;
+  return `${Math.floor(diff/60)}m ${diff%60}s`;
+}
+
+// Strip leading "data: '" and trailing "'" that appear in TAK server streams.
+// Also handles ROS2 topic echo format where strings are escaped:
+//   \" → "   and   \n → newline   and   \t → tab
+function stripStreamWrapper(raw) {
+  let s = raw.trim();
+
+  // ── ROS2 topic echo format ────────────────────────────────────────
+  // ros2 topic echo wraps string fields in escaped quotes:
+  //   data: "<?xml version=\"1.0\"...\n<event..."
+  // We detect this by the presence of \" and unescape the whole string.
+  if (s.includes('\\"')) {
+    // Strip outer wrapper if present: data: "..." or just the raw escaped string
+    s = s.replace(/^data:\s*["']/, '').replace(/["']\s*$/, '');
+    // Unescape ROS2 string escaping
+    s = s
+      .replace(/\\"/g,  '"')   // \" → "
+      .replace(/\\n/g,  '\n')  // \n → newline
+      .replace(/\\t/g,  '\t')  // \t → tab
+      .replace(/\\\\/g, '\\'); // \\ → \
+    return s.trim();
+  }
+
+  // ── TAK server stream format ──────────────────────────────────────
+  // Handle: data: '<?xml...'  or  data: "<?xml..."
+  s = s.replace(/^data:\s*['"]/, '').replace(/['"]\s*$/, '');
+  return s.trim();
+}
+
+// Inject fresh timestamps into an XML string (replaces time/start/stale attrs)
+function injectFreshTimestamps(xml, staleMins) {
+  const now   = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const stale = new Date(Date.now() + (staleMins||5)*60000)
+                  .toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return xml
+    .replace(/\btime="[^"]*"/,  `time="${now}"`)
+    .replace(/\bstart="[^"]*"/, `start="${now}"`)
+    .replace(/\bstale="[^"]*"/, `stale="${stale}"`);
+}
+
+// Get text content of first matching element
+function xmlText(doc, tag) {
+  const el = doc.querySelector(tag);
+  return el ? el.textContent.trim() : null;
+}
+
+// Get attribute from first matching element
+function xmlAttr(doc, selector, attr) {
+  const el = doc.querySelector(selector);
+  return el ? el.getAttribute(attr) : null;
+}
+
+// ── Main parse function ──────────────────────────────────────────
+function parseRawCoT() {
+  const raw = document.getElementById('rawCotInput').value;
+  if (!raw.trim()) return;
+
+  const cleaned = stripStreamWrapper(raw);
+
+  // Show results area
+  document.getElementById('parseResultLabel').style.display = 'block';
+  document.getElementById('parseResults').style.display     = 'block';
+  document.getElementById('parseError').style.display       = 'none';
+  document.getElementById('parseTable').style.display       = 'none';
+
+  // Parse XML
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(cleaned, 'application/xml');
+  const parseErr = doc.querySelector('parsererror');
+
+  if (parseErr) {
+    const errMsg = parseErr.textContent.trim().substring(0, 200);
+    document.getElementById('parseError').style.display  = 'block';
+    document.getElementById('parseError').textContent    = `XML parse error: ${errMsg}`;
+    return;
+  }
+
+  const event = doc.querySelector('event');
+  if (!event) {
+    document.getElementById('parseError').style.display = 'block';
+    document.getElementById('parseError').textContent   = 'No <event> element found. Is this valid CoT XML?';
+    return;
+  }
+
+  // ── Extract all fields ───────────────────────────────────────────
+  const uid      = event.getAttribute('uid')     || '';
+  const type     = event.getAttribute('type')    || '';
+  const how      = event.getAttribute('how')     || '';
+  const time     = event.getAttribute('time')    || '';
+  const start    = event.getAttribute('start')   || '';
+  const stale    = event.getAttribute('stale')   || '';
+  const access   = event.getAttribute('access')  || '';
+  const version  = event.getAttribute('version') || '';
+
+  const point    = doc.querySelector('point');
+  const lat      = point?.getAttribute('lat')  || '';
+  const lon      = point?.getAttribute('lon')  || '';
+  const hae      = point?.getAttribute('hae')  || '';
+  const ce       = point?.getAttribute('ce')   || '';
+  const le       = point?.getAttribute('le')   || '';
+
+  const callsign  = xmlAttr(doc, 'contact',           'callsign')    || xmlAttr(doc, 'uid', 'Droid') || '';
+  const endpoint  = xmlAttr(doc, 'contact',           'endpoint')    || '';
+  const group     = xmlAttr(doc, '__group',            'name')        || '';
+  const role      = xmlAttr(doc, '__group',            'role')        || '';
+  const battery   = xmlAttr(doc, 'status',             'battery')     || '';
+  const readiness = xmlAttr(doc, 'status',             'readiness')   || '';
+  const speed     = xmlAttr(doc, 'track',              'speed')       || '';
+  const course    = xmlAttr(doc, 'track',              'course')      || '';
+  const milsym    = xmlAttr(doc, '__milsym',           'id')          || '';
+  const milicon   = xmlAttr(doc, '__milicon',          'id')          || '';
+  const usericon  = xmlAttr(doc, 'usericon',           'iconsetpath') || '';
+  const device    = xmlAttr(doc, 'takv',               'device')      || '';
+  const platform  = xmlAttr(doc, 'takv',               'platform')    || '';
+  const os        = xmlAttr(doc, 'takv',               'os')          || '';
+  const ver       = xmlAttr(doc, 'takv',               'version')     || '';
+  const geopointsrc = xmlAttr(doc, 'precisionlocation','geopointsrc') || '';
+  const altsrc    = xmlAttr(doc, 'precisionlocation',  'altsrc')      || '';
+  const remarks   = xmlText(doc, 'remarks')            || '';
+  const linkUid   = xmlAttr(doc, 'link',               'uid')         || '';
+  const linkCall  = xmlAttr(doc, 'link',               'parent_callsign') || '';
+  const linkRel   = xmlAttr(doc, 'link',               'relation')    || '';
+  const linkType  = xmlAttr(doc, 'link',               'type')        || '';
+  const hasArchive = !!doc.querySelector('archive');
+  const flowTags  = doc.querySelector('_flow-tags_') || doc.querySelector('_flow_tags_');
+  const takServer = flowTags ? [...flowTags.attributes].find(a => a.name.startsWith('TAK-Server-')) : null;
+
+  // ── Chat-specific fields (type b-t-f) ────────────────────────────
+  // Direct message:  parent="RootContactGroup", id=recipientDeviceUID, uid1=recipientUID
+  // Group message:   parent="UserGroups",        id=groupUUID,          chatgrp has uid0/uid1/uid2/...
+  const chatEl         = doc.querySelector('__chat');
+  const chatroom       = chatEl?.getAttribute('chatroom')       || '';
+  const chatId         = chatEl?.getAttribute('id')             || '';
+  const senderCallsign = chatEl?.getAttribute('senderCallsign') || '';
+  const messageId      = chatEl?.getAttribute('messageId')      || '';
+  const chatParent     = chatEl?.getAttribute('parent')         || '';
+  const groupOwner     = chatEl?.getAttribute('groupOwner')     || '';
+  const isGroupChat    = chatParent === 'UserGroups';
+  const isTeamChat     = chatParent === 'TeamGroups';
+  // "All Chat Rooms" global broadcast — reserved literal id, uid1="All Chat Rooms", remarks has to= attr
+  const isAllChat      = chatId === 'All Chat Rooms';
+  // "All Groups" broadcast — id="UserGroups", chatroom="Groups", parent=RootContactGroup (not UserGroups!)
+  const isAllGroups    = chatId === 'UserGroups' && chatParent === 'RootContactGroup';
+  // "All Teams" broadcast  — id="TeamGroups",  chatroom="Teams",  parent=RootContactGroup (not TeamGroups!)
+  const isAllTeams     = chatId === 'TeamGroups' && chatParent === 'RootContactGroup';
+  // Role broadcast: RootContactGroup but id is a role name (HQ, Medic, etc.) not a device UID
+  // Heuristic: id doesn't start with ANDROID-, isn't a known reserved literal, chatgrp has uid0+uid1+uid2+
+  const isRoleBroadcast = !isGroupChat && !isTeamChat && !isAllChat && !isAllGroups && !isAllTeams
+    && chatId && !chatId.startsWith('ANDROID-')
+    && chatAllUids.length > 2;
+  const isMulticast    = isGroupChat || isTeamChat || isRoleBroadcast || isAllChat || isAllGroups || isAllTeams;
+
+  const chatgrpEl  = doc.querySelector('chatgrp');
+  const chatUid0   = chatgrpEl?.getAttribute('uid0') || ''; // always sender
+  const chatUid1   = chatgrpEl?.getAttribute('uid1') || ''; // recipient (direct) or member (group)
+  // Collect ALL uids from chatgrp (uid0, uid1, uid2, ... for group messages)
+  const chatAllUids = chatgrpEl
+    ? [...chatgrpEl.attributes]
+        .filter(a => /^uid\d+$/.test(a.name))
+        .sort((a, b) => parseInt(a.name.slice(3)) - parseInt(b.name.slice(3)))
+        .map(a => a.value)
+    : [];
+
+  // Group membership from <hierarchy> — extract all <contact> elements inside the group
+  const hierarchyEl    = chatEl?.querySelector('hierarchy');
+  const groupMembers   = hierarchyEl
+    ? [...hierarchyEl.querySelectorAll('contact')].map(el => ({
+        uid:  el.getAttribute('uid')  || '',
+        name: el.getAttribute('name') || '',
+      }))
+    : [];
+
+  const serverDest    = xmlAttr(doc, '__serverdestination', 'destinations') || '';
+  const remarksTo     = xmlAttr(doc, 'remarks', 'to')          || ''; // absent on group messages
+  const remarksSource = xmlAttr(doc, 'remarks', 'source')      || '';
+  const remarksTime   = xmlAttr(doc, 'remarks', 'time')        || '';
+  const messageText   = doc.querySelector('remarks')?.textContent?.trim() || '';
+
+  // ── Chat attachment (file/data package) ──────────────────────────
+  // When a file is attached to a chat, ATAK adds <__chatlinks> containing
+  // <item> elements with the filename and optional package UID.
+  // The actual file is transferred separately — this CoT is just the announcement.
+  // remarks text will be auto-generated: "sent a datapackage with N item(s)"
+  const chatLinksEl = doc.querySelector('__chatlinks');
+  const chatLinkItems = chatLinksEl
+    ? [...chatLinksEl.querySelectorAll('item')].map(el => ({
+        uid:  el.getAttribute('uid')  || '',
+        name: el.getAttribute('name') || '',
+      }))
+    : [];
+
+  // ── Chat delivery receipt fields (type b-t-f-d / b-t-f-r) ───────
+  // Auto-generated by the receiving ATAK device to acknowledge receipt.
+  // Uses <__chatreceipt> instead of <__chat>, uid0/uid1 are flipped,
+  // point is the RECIPIENT's GPS location, and there is no <remarks>.
+  const receiptEl         = doc.querySelector('__chatreceipt');
+  const receiptMessageId  = receiptEl?.getAttribute('messageId')      || '';
+  const receiptChatroom   = receiptEl?.getAttribute('chatroom')       || '';
+  const receiptSender     = receiptEl?.getAttribute('senderCallsign') || '';
+  const receiptId         = receiptEl?.getAttribute('id')             || '';
+
+  // ── File transfer fields (type b-f-t-r) ──────────────────────────
+  // Sent alongside b-t-f with __chatlinks when a file is attached to a chat.
+  // Contains the actual download URL and integrity checksum.
+  // The recipient fetches the file via HTTPS GET on senderUrl.
+  const fileshareEl      = doc.querySelector('fileshare');
+  const fsFilename       = fileshareEl?.getAttribute('filename')       || '';
+  const fsSenderUrl      = fileshareEl?.getAttribute('senderUrl')      || '';
+  const fsSenderCallsign = fileshareEl?.getAttribute('senderCallsign') || '';
+  const fsSenderUid      = fileshareEl?.getAttribute('senderUid')      || '';
+  const fsSizeBytes      = fileshareEl?.getAttribute('sizeInBytes')    || '';
+  const fsSha256         = fileshareEl?.getAttribute('sha256')         || '';
+  const fsPeerHosted     = fileshareEl?.getAttribute('peerHosted')     || '';
+  const fsName           = fileshareEl?.getAttribute('name')           || '';
+  const ackEl            = doc.querySelector('ackrequest');
+  const ackUid           = ackEl?.getAttribute('uid')                  || '';
+  const ackRequested     = ackEl?.getAttribute('ackrequested')         || '';
+  const ackTag           = ackEl?.getAttribute('tag')                  || '';
+
+  // ── Build breakdown table ────────────────────────────────────────
+  const rows = [];
+
+  const row = (label, value, note, highlight) => {
+    if (value === null || value === undefined || value === '') return;
+    rows.push({ label, value: String(value), note: note||'', highlight: highlight||false });
+  };
+
+  // Event envelope
+  row('UID',         uid,     'Globally unique entity identifier');
+  row('Type',        type,    describeType(type), true);
+  row('How',         how,     describeHow(how));
+  row('Time',        time,    '');
+  row('Start',       start,   '');
+  row('Stale',       stale,   timeUntil(stale), stale && new Date(stale) < new Date());
+  row('Access',      access,  '');
+  row('Version',     version, '');
+
+  // Position
+  row('Latitude',    lat,  '');
+  row('Longitude',   lon,  '');
+  row('HAE (m)',     hae,  'Height above WGS84 ellipsoid');
+  row('CE (m)',      ce,   ce === '9999999.0' ? 'Unknown/unconstrained' : 'Circular error (horizontal accuracy)');
+  row('LE (m)',      le,   le === '9999999.0' ? 'Unknown/unconstrained' : 'Linear error (vertical accuracy)');
+
+  // Detail
+  row('Callsign',    callsign,  '');
+  row('Endpoint',    endpoint,  '');
+  row('Group',       group,     '');
+  row('Role',        role,      '');
+  row('Battery %',   battery,   '');
+  row('Readiness',   readiness, '');
+  row('Speed (m/s)', speed,     speed > 0 ? 'Moving — orientation arrow visible in ATAK' : 'Stationary');
+  row('Course (°)',  course,    course ? `${course}° true north` : '');
+
+  // Platform
+  row('Device',      device,   '');
+  row('Platform',    platform, '');
+  row('OS',          os,       '');
+  row('TAK Version', ver,      '');
+
+  // Symbol
+  row('MilSym ID',   milsym,   'MIL-STD-2525C symbol code');
+  row('MilIcon ID',  milicon,  '');
+  row('User Icon',   usericon, 'ATAK icon set path');
+
+  // Precision
+  row('Geo Point Src', geopointsrc, '');
+  row('Alt Source',  altsrc,   '');
+
+  // Optional
+  if (hasArchive) row('Archive', 'yes', 'Persistent — survives stale, saved to TAK server');
+  row('Remarks',     remarks,  '');
+
+  // Link / creator
+  row('Link UID',    linkUid,  '');
+  row('Link Callsign', linkCall, '');
+  row('Link Relation', linkRel, '');
+  row('Link Type',   linkType, '');
+
+  // Flow tags (server relay info)
+  if (takServer) {
+    row('TAK Server Relay', takServer.name.replace('TAK-Server-','').substring(0,12)+'…', `Relayed at ${takServer.value}`);
+  }
+
+  // Chat fields (only present for type b-t-f GeoChat messages)
+  if (chatEl) {
+    const chatKind = isAllChat         ? 'GeoChat Global Broadcast (All Chat Rooms)'
+                   : isAllGroups       ? 'GeoChat All Groups Broadcast'
+                   : isAllTeams        ? 'GeoChat All Teams Broadcast'
+                   : isTeamChat       ? 'GeoChat Team Color Broadcast'
+                   : isGroupChat      ? 'GeoChat Group Message'
+                   : isRoleBroadcast  ? 'GeoChat Role Broadcast'
+                   :                    'GeoChat Direct Message';
+    rows.push({ label: `── ${chatKind} ──`, value: '', note: `type b-t-f, parent=${chatParent}`, separator: true });
+    row('Message',      messageText,    'The actual chat text', true);
+    row('Sender',       senderCallsign, '');
+    row('Sender UID',   chatUid0,       'uid0 in <chatgrp>');
+
+    if (isAllChat) {
+      row('Broadcast',    'All Chat Rooms', 'Reserved literal — TAK server delivers to all connected devices');
+      row('uid1',         chatUid1,         'Literal "All Chat Rooms" string, not a device UID');
+      row('Remarks To',   remarksTo,        'to="All Chat Rooms" — present for global broadcast, unlike team/role');
+    } else if (isAllGroups) {
+      row('Broadcast',    'All Groups',     'Reserved id="UserGroups" — delivers to all members of all user-created groups');
+      row('Chatroom',     chatroom,         'chatroom="Groups" — note this differs from id="UserGroups"');
+      row('Recipients',   chatAllUids.slice(1).join(', ') || '(none listed)', 'Explicit uid list — unlike All Chat Rooms, recipients are still enumerated');
+      row('Note',         'parent=RootContactGroup', 'Despite id="UserGroups", parent is RootContactGroup not UserGroups');
+    } else if (isAllTeams) {
+      row('Broadcast',    'All Teams',      'Reserved id="TeamGroups" — delivers to all members of all team color groups');
+      row('Chatroom',     chatroom,         'chatroom="Teams" — note this differs from id="TeamGroups"');
+      row('Recipients',   chatAllUids.slice(1).join(', ') || '(none listed)', 'Explicit uid list — robots can appear here (e.g. warthog1 as uid3)');
+      row('Note',         'parent=RootContactGroup', 'Despite id="TeamGroups", parent is RootContactGroup not TeamGroups');
+    } else if (isTeamChat) {
+      row('Team Color',   chatroom,     'Built-in ATAK team color group — all devices with this __group color receive the message');
+      row('Recipients',   chatAllUids.slice(1).join(', ') || '(none listed)', 'uid1, uid2, ... from <chatgrp>');
+      row('Group Owner',  'no (system group)', 'Team color groups are built into ATAK — not user-created');
+    } else if (isGroupChat) {
+      row('Group Name',   chatroom,     'Display name of the group chatroom');
+      row('Group UUID',   chatId,       'Stable UUID for this group — used in event UID');
+      row('Group Owner',  groupOwner === 'true' ? 'yes (sender created group)' : 'no', '');
+      if (groupMembers.length > 0) {
+        groupMembers.forEach((m, i) => row(`Member ${i + 1}`, m.name, m.uid));
+      } else if (chatAllUids.length > 1) {
+        chatAllUids.slice(1).forEach((uid, i) => row(`Recipient ${i + 1}`, uid, ''));
+      }
+    } else if (isRoleBroadcast) {
+      // Role broadcast: RootContactGroup + role-name id + multiple recipients
+      // Membership is implicit — all devices with this role receive the message
+      row('Role',         chatroom,     'ATAK role name — all devices with this role receive the message (HQ, Medic, Sniper, etc.)');
+      row('Recipients',   chatAllUids.slice(1).join(', ') || '(none listed)', 'uid1, uid2, ... from <chatgrp>');
+      row('Note',         'parent=RootContactGroup (same as direct)',
+                          'Role broadcasts reuse the direct message parent — the role name in id/chatroom is the key difference');
+    } else {
+      row('Chatroom / To', chatroom, 'Direct message — chatroom = recipient callsign');
+      row('Recipient UID', chatUid1,  'uid1 in <chatgrp>');
+      row('Remarks To',    remarksTo, '');
+    }
+
+    row('Message ID',     messageId,      'UUID for this specific message');
+    row('Chat Parent',    chatParent,     'RootContactGroup = direct, role, all-chat, all-groups, or all-teams | UserGroups = custom group | TeamGroups = team color');
+    row('Remarks Source', remarksSource,  '');
+    row('Server Dest',    serverDest,     'Sender return address: ip:port:protocol:uid');
+
+    // Attachments
+    if (chatLinkItems.length > 0) {
+      rows.push({ label: '── Attachments ──', value: '', note: 'File transfer announcement — actual file sent separately via data package transfer', separator: true });
+      chatLinkItems.forEach((item, i) => {
+        row(`File ${i + 1}`, item.name, item.uid ? `Package UID: ${item.uid}` : 'No package UID — direct peer transfer (no server)', true);
+      });
+    }
+
+  }  // end if (chatEl)
+
+  // Delivery receipt fields (type b-t-f-d / b-t-f-r — auto-generated by receiving device)
+  if (receiptEl) {
+    const receiptKind = type === 'b-t-f-r' ? 'Read Receipt (b-t-f-r)' : 'Delivery Receipt (b-t-f-d)';
+    const receiptNote = type === 'b-t-f-r'
+      ? 'User opened the message in ATAK — auto-generated'
+      : 'Message arrived at device — auto-generated';
+    rows.push({ label: `── Chat ${receiptKind} ──`, value: '', note: receiptNote, separator: true });
+    row('Acknowledged Msg', receiptMessageId, 'messageId of the original b-t-f message this confirms', true);
+    row('Recipient',        receiptSender,    'Callsign of device that received the message');
+    row('Recipient UID',    receiptId,        'Device UID of the receiver');
+    row('Chatroom',         receiptChatroom,  '');
+    row('Receipt uid0',     chatUid0,         'Receiving device UID (uid0/uid1 flipped vs original message)');
+    row('Receipt uid1',     chatUid1,         'Original sender UID');
+    row('Server Dest',      serverDest,       "Receiver's return address: ip:port:protocol:uid");
+    row('Receiver Location', `${lat}, ${lon}`, "Receiver's GPS position at time of receipt");
+  }
+
+  // File transfer section (type b-f-t-r)
+  if (fileshareEl) {
+    rows.push({ label: '── File Transfer ──', value: '', note: 'Peer file transfer request — recipient fetches file via senderUrl', separator: true });
+    row('Filename',      fsFilename,       '', true);
+    row('Size',          fsSizeBytes ? `${(parseInt(fsSizeBytes)/1024/1024).toFixed(2)} MB (${parseInt(fsSizeBytes).toLocaleString()} bytes)` : '', '');
+    row('Download URL',  fsSenderUrl,      fsPeerHosted === 'true' ? 'Peer-hosted — direct device-to-device transfer' : 'Server-hosted');
+    row('SHA-256',       fsSha256,         'Integrity checksum — verify after download');
+    row('From',          fsSenderCallsign, fsSenderUid);
+    row('Package Name',  fsName,           '');
+    if (ackEl) {
+      row('Ack Requested', ackRequested,   `Tag: ${ackTag}  UID: ${ackUid}`);
+    }
+  }
+
+  // ── Unrecognized fields ───────────────────────────────────────────
+  // Walk every child element of <detail> and flag anything not in our
+  // known-fields list. This catches vendor extensions, plugin tags,
+  // custom CoT fields, etc. — displayed as raw XML so nothing is lost.
+  const knownDetailTags = new Set([
+    'contact', '__group', 'uid', 'takv', 'track', 'status',
+    'precisionlocation', 'archive', '__milicon', '__milsym',
+    'usericon', 'link', 'creator', 'remarks', 'color',
+    '_flow-tags_',
+    // GeoChat / chat message tags
+    '__chat', 'chatgrp', '__serverdestination', '__chatlinks',
+    // Chat delivery receipt (type b-t-f-d / b-t-f-r) — auto-generated by receiving device
+    '__chatreceipt',
+    // Group chat hierarchy tree
+    'hierarchy', 'group', 'contact',
+    // File transfer (type b-f-t-r) — peer-to-peer file negotiation
+    'fileshare', 'ackrequest',
+    // TAK server relay tags — both hyphen and underscore variants seen in the wild
+    '_flow-tags_', '_flow_tags_',
+  ]);
+
+  const detailEl = doc.querySelector('detail');
+  if (detailEl) {
+    const unknownRows = [];
+    for (const child of detailEl.children) {
+      const tag = child.tagName;
+      if (!knownDetailTags.has(tag)) {
+        // Serialize the element's attributes as key="value" pairs
+        const attrs = [...child.attributes]
+          .map(a => `${a.name}="${a.value}"`)
+          .join('  ');
+        // Include text content if present (e.g. <remarks>text</remarks>)
+        const text = child.textContent.trim();
+        const display = attrs + (text ? (attrs ? '  ' : '') + `[text: ${text.substring(0,80)}]` : '');
+        unknownRows.push({ tag, display });
+      }
+    }
+
+    if (unknownRows.length > 0) {
+      // Add a separator row
+      rows.push({ label: '── Unrecognized ──', value: '', note: 'Fields not in known schema — preserved in raw send', separator: true });
+      unknownRows.forEach(r => {
+        rows.push({ label: `<${r.tag}>`, value: r.display || '(no attributes)', note: 'Unknown field — passed through on raw send, lost on Load into Form', unknown: true });
+      });
+    }
+  }
+
+  // ── Render table ─────────────────────────────────────────────────
+  const tbody = document.getElementById('parseTableBody');
+  tbody.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+
+    // ── Separator row (unrecognized fields header) ──────────────────
+    if (r.separator) {
+      tr.style.cssText = 'background:#1a1400;';
+      const td = document.createElement('td');
+      td.colSpan = 2;
+      td.style.cssText = 'padding:6px 8px;font-size:0.68rem;font-weight:700;color:#d29922;letter-spacing:0.06em;text-transform:uppercase;border-top:1px solid #d2992244;border-bottom:1px solid #d2992244;';
+      td.textContent = r.label;
+      const noteSpan = document.createElement('span');
+      noteSpan.style.cssText = 'font-weight:400;font-size:0.65rem;color:#8b6914;margin-left:8px;text-transform:none;letter-spacing:0;';
+      noteSpan.textContent = r.note;
+      td.appendChild(noteSpan);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+
+    tr.style.borderBottom = '1px solid #21262d';
+    if (r.highlight) tr.style.background = '#0d1a2e';
+    if (r.unknown)   tr.style.background = '#1a1500';
+
+    const tdLabel = document.createElement('td');
+    tdLabel.style.cssText = 'padding:5px 8px;color:#8b949e;font-weight:500;vertical-align:top;white-space:nowrap;';
+    // Unknown fields show tag name in amber
+    if (r.unknown) tdLabel.style.color = '#d29922';
+    tdLabel.textContent = r.label;
+
+    const tdVal = document.createElement('td');
+    tdVal.style.cssText = 'padding:5px 8px;vertical-align:top;';
+
+    const valSpan = document.createElement('span');
+    valSpan.style.cssText = 'font-family:"Courier New",monospace;font-size:0.7rem;word-break:break-all;';
+    valSpan.style.color = r.unknown ? '#e3b341' : '#79c0ff';
+    valSpan.textContent = r.value;
+    tdVal.appendChild(valSpan);
+
+    if (r.note) {
+      const noteSpan = document.createElement('span');
+      noteSpan.style.cssText = 'display:block;font-size:0.65rem;color:#6e7681;margin-top:2px;font-family:inherit;';
+      if (r.unknown) noteSpan.style.color = '#8b6914';
+      noteSpan.textContent = r.note;
+      tdVal.appendChild(noteSpan);
+    }
+
+    tr.appendChild(tdLabel);
+    tr.appendChild(tdVal);
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('parseTable').style.display = 'block';
+
+  // Store parsed data for use by load/send functions
+  window._parsedCoT = {
+    cleaned, uid, type, how, time, start, stale,
+    lat, lon, hae, ce, le,
+    callsign, endpoint, group, role, battery, speed, course,
+    device, platform, os, ver,
+    milsym, usericon, geopointsrc, altsrc,
+    hasArchive, remarks, linkUid, linkCall, linkRel, linkType,
+    staleMins: Math.max(1, Math.round((new Date(stale) - new Date()) / 60000)) || 5,
+  };
+}
+
+// ── Load parsed CoT into the form ────────────────────────────────
+function parseAndLoad() {
+  parseRawCoT();
+  const p = window._parsedCoT;
+  if (!p) return;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+
+  set('uid',        p.uid);
+  set('callsign',   p.callsign);
+  set('type',       p.type);
+  set('how',        p.how);
+  set('lat',        p.lat);
+  set('lon',        p.lon);
+  set('hae',        p.hae);
+  set('ce',         p.ce);
+  set('le',         p.le);
+  set('staleMins',  p.staleMins);
+
+  // Group color/role
+  if (p.group) {
+    const gc = document.getElementById('groupColor');
+    if ([...gc.options].some(o => o.value === p.group)) gc.value = p.group;
+  }
+  if (p.role) {
+    const gr = document.getElementById('groupRole');
+    if ([...gr.options].some(o => o.value === p.role)) gr.value = p.role;
+  }
+
+  // Track
+  if (p.speed || p.course) {
+    document.getElementById('enableTrack').checked = true;
+    document.getElementById('trackSection').style.display = 'block';
+    set('speed',  p.speed);
+    set('course', p.course);
+  }
+
+  // Battery
+  if (p.battery) {
+    document.getElementById('enableBattery').checked = true;
+    set('battery', p.battery);
+  }
+
+  // Platform
+  set('takvDevice',   p.device);
+  set('takvPlatform', p.platform);
+  set('takvOs',       p.os);
+  set('takvVersion',  p.ver);
+
+  // MilSym
+  const milsymCb = document.getElementById('enableMilsym');
+  const milsymSec = document.getElementById('milsymSection');
+  if (p.milsym) {
+    milsymCb.checked = true;
+    milsymSec.classList.add('active');
+    set('milsymId', p.milsym);
+  } else {
+    milsymCb.checked = false;
+    milsymSec.classList.remove('active');
+  }
+
+  // Precision location
+  if (p.geopointsrc || p.altsrc) {
+    document.getElementById('enablePrecision').checked = true;
+    document.getElementById('precisionSection').classList.add('active');
+    if (p.geopointsrc) {
+      const gps = document.getElementById('geopointsrc');
+      if ([...gps.options].some(o => o.value === p.geopointsrc)) gps.value = p.geopointsrc;
+    }
+    if (p.altsrc) {
+      const alt = document.getElementById('altsrc');
+      if ([...alt.options].some(o => o.value === p.altsrc)) alt.value = p.altsrc;
+    }
+  }
+
+  // Archive
+  if (p.hasArchive) document.getElementById('enableArchive').checked = true;
+
+  // Remarks
+  if (p.remarks) {
+    document.getElementById('enableRemarks').checked = true;
+    document.getElementById('remarksSection').classList.add('active');
+    set('remarks', p.remarks);
+  }
+
+  // Link
+  if (p.linkUid) {
+    document.getElementById('enableLink').checked = true;
+    document.getElementById('linkSection').classList.add('active');
+    set('linkUid',      p.linkUid);
+    set('linkCallsign', p.linkCall);
+    set('linkType',     p.linkType);
+    const lr = document.getElementById('linkRelation');
+    if ([...lr.options].some(o => o.value === p.linkRel)) lr.value = p.linkRel;
+  }
+
+  updateTypeHelper();
+  generateXML();
+
+  // Scroll down to the form
+  document.querySelector('.panel').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ── Send the raw XML exactly as pasted ───────────────────────────
+async function parseAndSend() {
+  const raw = document.getElementById('rawCotInput').value.trim();
+  if (!raw) { appendLog('No raw CoT to send — paste XML first.', 'error'); return; }
+  const cleaned = stripStreamWrapper(raw);
+  await sendRawXml(cleaned, 'Raw CoT (as-is)');
+}
+
+// ── Send with timestamps updated to now ─────────────────────────
+async function parseAndSendFresh() {
+  const raw = document.getElementById('rawCotInput').value.trim();
+  if (!raw) { appendLog('No raw CoT to send — paste XML first.', 'error'); return; }
+  const cleaned   = stripStreamWrapper(raw);
+  const refreshed = injectFreshTimestamps(cleaned, 5);
+  await sendRawXml(refreshed, 'Raw CoT (fresh timestamps)');
+}
+
+// ── Shared send helper for raw XML ───────────────────────────────
+async function sendRawXml(xml, label) {
+  const base = document.getElementById('takServerUrl').value.trim().replace(/\/$/, '');
+  const path = document.getElementById('takApiPath').value.trim();
+
+  if (!base) {
+    appendLog('ERROR: No server URL set. Fill in the TAK Server section.', 'error');
+    setStatus('error', 'No server URL — fill in the TAK Server section.');
+    return;
+  }
+
+  const url = `${base}${path}`;
+  setStatus('sending', `Sending [${label}] to ${url}…`);
+  appendLog(`[${label}] POST ${url}`, 'info');
+
+  try {
+    const resp = await fetch(url, {
+      method:  'POST',
+      headers: { ...buildHeaders(), 'Content-Type': 'application/xml' },
+      body:    xml,
+    });
+    if (resp.ok) {
+      setStatus('ok', `Delivered.`, resp.status);
+      appendLog(`✓ ${resp.status} ${resp.statusText}`, 'ok');
+    } else {
+      const body = await resp.text().catch(() => '');
+      setStatus('error', `Server error.`, resp.status);
+      appendLog(`✗ ${resp.status} — ${body.substring(0, 120)}`, 'error');
+    }
+  } catch (err) {
+    setStatus('error', `Network error — ${err.message}`);
+    appendLog(`✗ ${err.message}`, 'error');
+    appendLog('  → Is the proxy running?', 'warn');
+  }
+}
+
+function clearParseResults() {
+  document.getElementById('parseResults').style.display     = 'none';
+  document.getElementById('parseResultLabel').style.display = 'none';
+  window._parsedCoT = null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CHAT MESSAGE COMPOSER
+// ══════════════════════════════════════════════════════════════════
+
+function genUuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ── Mode toggle ──────────────────────────────────────────────────
+function updateChatMode() {
+  const mode = document.querySelector('input[name="chatMode"]:checked')?.value || 'direct';
+  document.getElementById('chatDirectFields').style.display    = mode === 'direct'    ? 'block' : 'none';
+  document.getElementById('chatGroupFields').style.display     = mode === 'group'     ? 'block' : 'none';
+  document.getElementById('chatTeamFields').style.display      = mode === 'team'      ? 'block' : 'none';
+  document.getElementById('chatRoleFields').style.display      = mode === 'role'      ? 'block' : 'none';
+  document.getElementById('chatAllFields').style.display       = mode === 'all'       ? 'block' : 'none';
+  document.getElementById('chatAllGroupsFields').style.display = mode === 'allgroups' ? 'block' : 'none';
+  document.getElementById('chatAllTeamsFields').style.display  = mode === 'allteams'  ? 'block' : 'none';
+  buildChatXml();
+}
+
+// ── Group member rows ────────────────────────────────────────────
+let memberCounter = 0;
+
+function addChatMember(callsign, uid) {
+  memberCounter++;
+  const id  = `member-${memberCounter}`;
+  const row = document.createElement('div');
+  row.id    = id;
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Callsign (e.g. TRILL)"
+           value="${callsign || ''}"
+           style="font-size:0.78rem;"
+           oninput="buildChatXml()" onchange="buildChatXml()"/>
+    <input type="text" placeholder="Device UID (e.g. ANDROID-xxxx)"
+           value="${uid || ''}"
+           style="font-family:'Courier New',monospace;font-size:0.72rem;"
+           oninput="buildChatXml()" onchange="buildChatXml()"/>
+    <button type="button"
+            onclick="document.getElementById('${id}').remove(); buildChatXml();"
+            style="padding:4px 8px;color:#f85149;border-color:#f85149;font-size:0.75rem;flex-shrink:0;">✕</button>`;
+  document.getElementById('chatMemberList').appendChild(row);
+  buildChatXml();
+}
+
+let teamMemberCounter = 0;
+
+function addTeamMember(uid) {
+  teamMemberCounter++;
+  const id  = `tmember-${teamMemberCounter}`;
+  const row = document.createElement('div');
+  row.id    = id;
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Device UID (e.g. ANDROID-xxxx)"
+           value="${uid || ''}"
+           style="font-family:'Courier New',monospace;font-size:0.72rem;"
+           oninput="buildChatXml()" onchange="buildChatXml()"/>
+    <button type="button"
+            onclick="document.getElementById('${id}').remove(); buildChatXml();"
+            style="padding:4px 8px;color:#f85149;border-color:#f85149;font-size:0.75rem;">✕</button>`;
+  document.getElementById('chatTeamMemberList').appendChild(row);
+  buildChatXml();
+}
+
+function getTeamMembers() {
+  return [...document.getElementById('chatTeamMemberList').children]
+    .map(row => row.querySelector('input').value.trim())
+    .filter(Boolean);
+}
+
+let roleMemberCounter = 0;
+
+function addRoleMember(uid) {
+  roleMemberCounter++;
+  const id  = `rmember-${roleMemberCounter}`;
+  const row = document.createElement('div');
+  row.id    = id;
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Device UID (e.g. ANDROID-xxxx)"
+           value="${uid || ''}"
+           style="font-family:'Courier New',monospace;font-size:0.72rem;"
+           oninput="buildChatXml()" onchange="buildChatXml()"/>
+    <button type="button"
+            onclick="document.getElementById('${id}').remove(); buildChatXml();"
+            style="padding:4px 8px;color:#f85149;border-color:#f85149;font-size:0.75rem;">✕</button>`;
+  document.getElementById('chatRoleMemberList').appendChild(row);
+  buildChatXml();
+}
+
+function getRoleMembers() {
+  return [...document.getElementById('chatRoleMemberList').children]
+    .map(row => row.querySelector('input').value.trim())
+    .filter(Boolean);
+}
+
+let allGroupsMemberCounter = 0;
+
+function addAllGroupsMember(uid) {
+  allGroupsMemberCounter++;
+  const id  = `agmember-${allGroupsMemberCounter}`;
+  const row = document.createElement('div');
+  row.id    = id;
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Device UID (e.g. ANDROID-xxxx)"
+           value="${uid || ''}"
+           style="font-family:'Courier New',monospace;font-size:0.72rem;"
+           oninput="buildChatXml()" onchange="buildChatXml()"/>
+    <button type="button"
+            onclick="document.getElementById('${id}').remove(); buildChatXml();"
+            style="padding:4px 8px;color:#f85149;border-color:#f85149;font-size:0.75rem;">✕</button>`;
+  document.getElementById('chatAllGroupsMemberList').appendChild(row);
+  buildChatXml();
+}
+
+function getAllGroupsMembers() {
+  return [...document.getElementById('chatAllGroupsMemberList').children]
+    .map(row => row.querySelector('input').value.trim())
+    .filter(Boolean);
+}
+
+let allTeamsMemberCounter = 0;
+
+function addAllTeamsMember(uid) {
+  allTeamsMemberCounter++;
+  const id  = `atmember-${allTeamsMemberCounter}`;
+  const row = document.createElement('div');
+  row.id    = id;
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Device UID (e.g. ANDROID-xxxx or warthog1)"
+           value="${uid || ''}"
+           style="font-family:'Courier New',monospace;font-size:0.72rem;"
+           oninput="buildChatXml()" onchange="buildChatXml()"/>
+    <button type="button"
+            onclick="document.getElementById('${id}').remove(); buildChatXml();"
+            style="padding:4px 8px;color:#f85149;border-color:#f85149;font-size:0.75rem;">✕</button>`;
+  document.getElementById('chatAllTeamsMemberList').appendChild(row);
+  buildChatXml();
+}
+
+function getAllTeamsMembers() {
+  return [...document.getElementById('chatAllTeamsMemberList').children]
+    .map(row => row.querySelector('input').value.trim())
+    .filter(Boolean);
+}
+
+// Show/hide custom role input when "Custom…" is selected
+function onRoleSelectChange() {
+  const sel = document.getElementById('chatRoleName');
+  const custom = document.getElementById('chatRoleCustom');
+  custom.style.display = sel.value === 'custom' ? 'block' : 'none';
+  buildChatXml();
+}
+function getChatMembers() {
+  return [...document.getElementById('chatMemberList').children].map(row => {
+    const inputs = row.querySelectorAll('input');
+    return { callsign: inputs[0].value.trim(), uid: inputs[1].value.trim() };
+  }).filter(m => m.uid);
+}
+
+// ── XML builder ──────────────────────────────────────────────────
+function buildChatXml() {
+  const mode           = document.querySelector('input[name="chatMode"]:checked')?.value || 'direct';
+  const senderCallsign = document.getElementById('chatSenderCallsign').value.trim() || 'SENDER';
+  const senderUid      = document.getElementById('chatSenderUid').value.trim()      || 'ANDROID-example0000000001';
+  const serverDest     = document.getElementById('chatServerDest').value.trim()     || '';
+  const messageText    = document.getElementById('chatMessage').value.trim()        || '';
+
+  const lat  = document.getElementById('lat').value.trim() || '0.0';
+  const lon  = document.getElementById('lon').value.trim() || '0.0';
+  const hae  = document.getElementById('hae').value.trim() || '0';
+
+  const msgUuid = genUuid();
+  const now     = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const nowMs   = new Date().toISOString();
+  const stale   = new Date(Date.now() + 24*60*60*1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+  let xml;
+
+  if (mode === 'direct') {
+    // ── Direct message ───────────────────────────────────────────
+    // parent=RootContactGroup, id=recipientUID, no hierarchy
+    const chatroom     = document.getElementById('chatRecipient').value.trim()    || 'warthog1';
+    const recipientUid = document.getElementById('chatRecipientUid').value.trim() || chatroom;
+
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.${recipientUid}.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="RootContactGroup"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="${chatroom}"
+            id="${recipientUid}"
+            senderCallsign="${senderCallsign}">
+      <chatgrp uid0="${senderUid}" uid1="${recipientUid}" id="${recipientUid}"/>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" to="${recipientUid}" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+
+  } else if (mode === 'group') {
+    // ── User-created group ───────────────────────────────────────
+    // parent=UserGroups, id=groupUUID, full <hierarchy> roster present
+    const groupName = document.getElementById('chatGroupName').value.trim() || 'GROUP';
+    let   groupUuid = document.getElementById('chatGroupUid').value.trim();
+    if (!groupUuid) {
+      groupUuid = genUuid();
+      document.getElementById('chatGroupUid').value = groupUuid;
+    }
+
+    const members      = getChatMembers();
+    const allUids      = [senderUid, ...members.map(m => m.uid)];
+    const chatgrpUids  = allUids.map((u, i) => `uid${i}="${u}"`).join('\n               ');
+    const allMembers   = [{ callsign: senderCallsign, uid: senderUid }, ...members];
+    const contactLines = allMembers
+      .map(m => `            <contact uid="${m.uid}" name="${m.callsign || m.uid}"/>`)
+      .join('\n');
+
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.${groupUuid}.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="UserGroups"
+            groupOwner="true"
+            messageId="${msgUuid}"
+            chatroom="${groupName}"
+            id="${groupUuid}"
+            senderCallsign="${senderCallsign}">
+      <chatgrp ${chatgrpUids} id="${groupUuid}"/>
+      <hierarchy>
+        <group uid="UserGroups" name="Groups">
+          <group uid="${groupUuid}" name="${groupName}">
+${contactLines}
+          </group>
+        </group>
+      </hierarchy>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+
+  } else if (mode === 'team') {
+    // ── Team color broadcast ─────────────────────────────────────
+    // parent=TeamGroups, id=colorName, groupOwner=false
+    // membership is implicit (all devices with matching __group name) — no <hierarchy>
+    const teamColor    = document.getElementById('chatTeamColor').value;
+    const extraUids    = getTeamMembers(); // optional explicit uid list
+    const allUids      = [senderUid, ...extraUids];
+    const chatgrpUids  = allUids.map((u, i) => `uid${i}="${u}"`).join('\n               ');
+
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.${teamColor}.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="TeamGroups"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="${teamColor}"
+            id="${teamColor}"
+            senderCallsign="${senderCallsign}">
+      <chatgrp ${chatgrpUids} id="${teamColor}"/>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+
+  } else if (mode === 'role') {
+    // ── Role broadcast ───────────────────────────────────────────
+    // parent=RootContactGroup (same as direct) but chatroom/id = role name, multiple recipients
+    // Membership is NOT implicit — must enumerate uids explicitly in chatgrp
+    const roleSelect = document.getElementById('chatRoleName').value;
+    const roleName   = roleSelect === 'custom'
+      ? (document.getElementById('chatRoleCustom').value.trim() || 'HQ')
+      : roleSelect;
+    const roleUids    = getRoleMembers();
+    const allRoleUids = [senderUid, ...roleUids];
+    const roleChatgrp = allRoleUids.map((u, i) => `uid${i}="${u}"`).join('\n               ');
+
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.${roleName}.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="RootContactGroup"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="${roleName}"
+            id="${roleName}"
+            senderCallsign="${senderCallsign}">
+      <chatgrp ${roleChatgrp} id="${roleName}"/>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+
+  } else if (mode === 'allgroups') {
+    // ── All Groups broadcast ─────────────────────────────────────
+    // Reserved id="UserGroups", chatroom="Groups" (note: these differ, unlike other broadcast types)
+    // parent=RootContactGroup despite routing to user groups
+    // Recipients must be enumerated explicitly — not implicit like team color
+    const agUids    = getAllGroupsMembers();
+    const allAgUids = [senderUid, ...agUids];
+    const agChatgrp = allAgUids.map((u, i) => `uid${i}="${u}"`).join('\n               ');
+
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.UserGroups.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="RootContactGroup"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="Groups"
+            id="UserGroups"
+            senderCallsign="${senderCallsign}">
+      <chatgrp ${agChatgrp} id="UserGroups"/>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+
+  } else if (mode === 'allteams') {
+    // ── All Teams broadcast ──────────────────────────────────────
+    // Mirror of allgroups but for team color groups
+    // Reserved id="TeamGroups", chatroom="Teams", parent=RootContactGroup
+    // Robots assigned to a team color appear in the recipient uid list
+    const atUids    = getAllTeamsMembers();
+    const allAtUids = [senderUid, ...atUids];
+    const atChatgrp = allAtUids.map((u, i) => `uid${i}="${u}"`).join('\n               ');
+
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.TeamGroups.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="RootContactGroup"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="Teams"
+            id="TeamGroups"
+            senderCallsign="${senderCallsign}">
+      <chatgrp ${atChatgrp} id="TeamGroups"/>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+
+  } else {
+    // Reserved literal "All Chat Rooms" used as chatroom, id, AND uid1 in chatgrp
+    // Unlike team/role, the <remarks> element has to="All Chat Rooms" (same convention as direct)
+    // No recipient enumeration — TAK server delivers to all connected devices
+    xml = `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="GeoChat.${senderUid}.All Chat Rooms.${msgUuid}"
+       type="b-t-f" how="h-g-i-g-o"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="${lat}" lon="${lon}" hae="${hae}" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <__chat parent="RootContactGroup"
+            groupOwner="false"
+            messageId="${msgUuid}"
+            chatroom="All Chat Rooms"
+            id="All Chat Rooms"
+            senderCallsign="${senderCallsign}">
+      <chatgrp uid0="${senderUid}" uid1="All Chat Rooms" id="All Chat Rooms"/>
+    </__chat>
+    <link uid="${senderUid}" type="a-f-G-U-C" relation="p-p"/>
+    ${serverDest ? `<__serverdestination destinations="${serverDest}"/>` : ''}
+    <remarks source="BAO.F.ATAK.${senderUid}" to="All Chat Rooms" time="${nowMs}">${messageText}</remarks>
+  </detail>
+</event>`;
+  }
+
+  const previewEl = document.getElementById('chatPreviewXml');
+  previewEl.textContent    = xml;
+  previewEl.style.color    = '#c9d1d9';
+  previewEl.style.fontStyle = 'normal';
+
+  return xml;
+}
+
+async function sendChatMessage() {
+  const msg = document.getElementById('chatMessage').value.trim();
+  if (!msg) {
+    appendLog('Chat: no message text entered.', 'warn');
+    return;
+  }
+
+  const xml  = buildChatXml();
+  const base = document.getElementById('takServerUrl').value.trim().replace(/\/$/, '');
+  const path = document.getElementById('takApiPath').value.trim();
+
+  if (!base) {
+    appendLog('ERROR: No server URL set. Fill in the TAK Server section.', 'error');
+    setStatus('error', 'No server URL — fill in the TAK Server section.');
+    return;
+  }
+
+  const url  = `${base}${path}`;
+  const mode = document.querySelector('input[name="chatMode"]:checked')?.value || 'direct';
+  const sender = document.getElementById('chatSenderCallsign').value.trim() || 'SENDER';
+  const recipient = mode === 'group'     ? (document.getElementById('chatGroupName').value.trim() || 'GROUP')
+                  : mode === 'team'      ? (document.getElementById('chatTeamColor').value        || 'team')
+                  : mode === 'role'      ? (() => { const s = document.getElementById('chatRoleName').value; return s === 'custom' ? (document.getElementById('chatRoleCustom').value.trim() || 'role') : s; })()
+                  : mode === 'all'       ? 'All Chat Rooms'
+                  : mode === 'allgroups' ? 'All Groups'
+                  : mode === 'allteams'  ? 'All Teams'
+                  :                        (document.getElementById('chatRecipient').value.trim() || 'warthog1');
+  const modeLabel = mode === 'group' ? 'GROUP' : mode === 'team' ? 'TEAM' : mode === 'role' ? 'ROLE'
+                  : mode === 'all' ? 'ALL' : mode === 'allgroups' ? 'ALL GROUPS' : mode === 'allteams' ? 'ALL TEAMS' : '';
+
+  setStatus('sending', `Sending${modeLabel ? ' ' + modeLabel : ''} chat from ${sender} to ${recipient}…`);
+  appendLog(`[CHAT${modeLabel ? ' ' + modeLabel : ''}] ${sender} → ${recipient}: "${document.getElementById('chatMessage').value.trim()}"`, 'info');
+  appendLog(`POST ${url}`, 'info');
+
+  try {
+    const resp = await fetch(url, {
+      method:  'POST',
+      headers: { ...buildHeaders(), 'Content-Type': 'application/xml' },
+      body:    xml,
+    });
+    if (resp.ok) {
+      setStatus('ok', `Chat delivered to ${recipient}.`, resp.status);
+      appendLog(`✓ ${resp.status} ${resp.statusText}`, 'ok');
+    } else {
+      const body = await resp.text().catch(() => '');
+      setStatus('error', `Server error.`, resp.status);
+      appendLog(`✗ ${resp.status} — ${body.substring(0, 120)}`, 'error');
+    }
+  } catch (err) {
+    setStatus('error', `Network error — ${err.message}`);
+    appendLog(`✗ ${err.message}`, 'error');
+    appendLog('  → Is the proxy running?', 'warn');
+  }
+}
+
+function copyChatMessage() {
+  const xml = buildChatXml();
+  navigator.clipboard.writeText(xml).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+
+// Auto-generate on any input change
+document.querySelectorAll('input, select, textarea').forEach(el => {
+  el.addEventListener('change', generateXML);
+  el.addEventListener('input', generateXML);
+});
+
+// Live chat XML preview — update whenever any chat composer field changes
+['chatSenderCallsign','chatSenderUid','chatRecipient','chatRecipientUid',
+ 'chatGroupName','chatGroupUid','chatTeamColor',
+ 'chatRoleName','chatRoleCustom','chatServerDest','chatMessage'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input',  buildChatXml);
+    el.addEventListener('change', buildChatXml);
+  }
+});
+
+// Initial generation
+generateXML();
+</script>
+</body>
+</html>
