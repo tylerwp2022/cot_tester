@@ -3348,15 +3348,45 @@ function parseRawCoT() {
 
   // File transfer section (type b-f-t-r)
   if (fileshareEl) {
-    rows.push({ label: '── File Transfer ──', value: '', note: 'Peer file transfer request — recipient fetches file via senderUrl', separator: true });
-    row('Filename',      fsFilename,       '', true);
-    row('Size',          fsSizeBytes ? `${(parseInt(fsSizeBytes)/1024/1024).toFixed(2)} MB (${parseInt(fsSizeBytes).toLocaleString()} bytes)` : '', '');
-    row('Download URL',  fsSenderUrl,      fsPeerHosted === 'true' ? 'Peer-hosted — direct device-to-device transfer' : 'Server-hosted');
-    row('SHA-256',       fsSha256,         'Integrity checksum — verify after download');
-    row('From',          fsSenderCallsign, fsSenderUid);
-    row('Package Name',  fsName,           '');
+    // Stale window — critical for robot receive handlers.
+    // ATAK sets stale only ~10 seconds after time for b-f-t-r; miss it and the transfer expires.
+    const staleMs   = stale ? new Date(stale) - new Date(time) : null;
+    const staleNote = staleMs !== null
+      ? `${(staleMs/1000).toFixed(0)}s download window — fetch senderUrl before stale`
+      : '';
+
+    // Infer ZIP contents from filename convention
+    const isTransferZip = fsFilename === 'transfer.zip' || fsName === 'transfer';
+    const zipNote = isTransferZip
+      ? 'ATAK data package — ZIP contains individual CoT XML files for each lasso-selected object'
+      : '';
+
+    rows.push({ label: '── File Transfer ──', value: '', note: 'Recipient must GET senderUrl within stale window, then unzip and parse each CoT file inside', separator: true });
+    row('Filename',       fsFilename, zipNote || '', true);
+    row('Package Name',   fsName,     '');
+    row('Size',           fsSizeBytes ? `${parseInt(fsSizeBytes).toLocaleString()} bytes` : '', '');
+    row('Download URL',   fsSenderUrl,
+        fsPeerHosted === 'true'
+          ? 'Peer-hosted — direct device-to-device transfer (no TAK server relay)'
+          : 'Server-hosted — fetch via HTTPS GET using Marti sync content endpoint');
+    row('SHA-256',        fsSha256,   'Verify integrity after download before parsing');
+    row('From',           fsSenderCallsign, fsSenderUid);
+    if (staleNote) row('Stale Window', `${stale}`, staleNote);
     if (ackEl) {
-      row('Ack Requested', ackRequested,   `Tag: ${ackTag}  UID: ${ackUid}`);
+      row('Ack Requested', ackRequested,
+          `Send b-f-t-r-ack with ackrequest uid="${ackUid}" tag="${ackTag}" to confirm receipt`);
+    }
+
+    // ce/le NaN note — ATAK uses NaN (not 9999999.0) for unknown precision on b-f-t-r
+    if (ce === 'NaN' || le === 'NaN') {
+      row('CE / LE Note', 'NaN',
+          'b-f-t-r uses NaN for unknown precision — distinct from the 9999999.0 sentinel used on SA beacons and drawn shapes');
+    }
+
+    if (isTransferZip) {
+      rows.push({ label: 'Fetch Workflow', value: '',
+        note: '1) GET senderUrl (HTTPS, within stale window)  →  2) Unzip transfer.zip  →  3) Parse each .cot/.xml inside  →  4) (Optional) send b-f-t-r-ack',
+        separator: false });
     }
   }
 

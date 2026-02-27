@@ -315,3 +315,60 @@ parent = "UserGroups"   → user-created group message
 ```
 
 Process as a command only when: `type = b-t-f` AND `parent = RootContactGroup` AND `id = warthog1` (direct message).
+
+### File transfer (`b-f-t-r`) — lasso send to robot
+
+When an ATAK user lasso-selects multiple map objects and sends them to a specific device, the recipient receives a single `b-f-t-r` event containing a download URL for a `transfer.zip`. The ZIP contains individual CoT XML files — one per selected object.
+
+**Key fields:**
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| `senderUrl` | `https://10.10.10.3:8443/Marti/sync/content?hash=...` | Marti sync endpoint — HTTPS GET |
+| `sha256` | 64-char hex | Verify after download |
+| `sizeInBytes` | `3451` | ZIP size in bytes |
+| `stale` | 10s after `time` | **Download window** — must fetch before stale |
+
+**ce/le = NaN:** `b-f-t-r` events use `ce="NaN"` and `le="NaN"` for unknown precision — distinct from the `9999999.0` sentinel used everywhere else.
+
+**Fetch workflow for warthog1:**
+
+```
+1. Receive b-f-t-r
+2. GET senderUrl  ←── must happen before stale (~10s window)
+      └─ HTTPS GET https://{server}:8443/Marti/sync/content?hash={sha256}
+3. Verify sha256
+4. Unzip transfer.zip
+5. Parse each .cot / .xml file inside:
+      ├─ u-d-f       → phase line
+      ├─ b-m-p-s-m   → spot map marker (×N)
+      ├─ u-d-c-c     → circle
+      └─ ...
+6. (Optional) send b-f-t-r-ack:
+      ackrequest uid from original message, ackrequested="true"
+```
+
+**Note on the `<point>` position:** The lat/lon on the `b-f-t-r` event itself is the centroid of all lasso-selected objects — not the position of any individual object. Individual object positions are inside the ZIP.
+
+### TAK server protocol handshake (`t-x-takp-v`)
+
+Sent by the TAK server to every connecting client immediately on connection — before any SA or chat traffic. The client must respond with the same type to complete the negotiation and select a protocol version.
+
+```xml
+<TakControl>
+  <TakProtocolSupport version="1"/>
+  <TakServerVersionInfo serverVersion="5.2-DEV-47-HEAD" apiVersion="3"/>
+</TakControl>
+```
+
+| Field | Value | Meaning |
+|-------|-------|---------|
+| `how` | `m-g` | Machine-generated — only server control messages use this value |
+| `TakProtocolSupport version` | `1` | TAK streaming protocol v1 (protobuf framing, port 8089+) |
+| `serverVersion` | `5.2-DEV-47-HEAD` | TAK Server software version |
+| `apiVersion` | `3` | Marti REST API version — governs available `/Marti/` endpoints |
+| `ce` / `le` | `999999` | 6-nines sentinel — server control messages, no geographic context |
+
+**`ce="999999"` vs `ce="9999999.0"`:** Server control messages use 6 nines; SA beacons, drawn shapes, and most other types use 7 nines (`9999999.0`). Both mean "unknown/unconstrained" but are structurally distinct.
+
+**Client response:** Send back a `t-x-takp-v` with `<TakProtocolSupport version="1"/>` to tell the server which protocol version the client has selected for the session. If warthog1 does not respond, some TAK server versions will close the connection or fall back to a legacy unframed mode.
