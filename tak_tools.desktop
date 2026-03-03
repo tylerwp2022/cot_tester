@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CoT Message Builder
+Comment=Start TAK tools and open CoT Message Builder in browser
+# UPDATE THIS PATH to wherever you put the scripts:
+Exec=/bin/bash -c "cd /home/warthog/CoT_Tester && ./start_tak_tools.sh"
+Icon=network-transmit-receive
+Terminal=true
+Categories=Network;Utility;
+StartupNotify=false
