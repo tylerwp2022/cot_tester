@@ -1,0 +1,2728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CoT Message Builder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #58a6ff;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    color: #6e7681;
+    margin-bottom: 24px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1400px;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .panel-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b949e;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #21262d;
+  }
+
+  .section { margin-bottom: 20px; }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #58a6ff;
+    margin-bottom: 10px;
+    padding: 4px 0;
+    border-left: 3px solid #58a6ff;
+    padding-left: 8px;
+  }
+
+  .field { margin-bottom: 10px; }
+
+  .field label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #8b949e;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  .field label .tag {
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    background: #21262d;
+    color: #79c0ff;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .field label .required { color: #f85149; font-size: 0.65rem; }
+  .field label .optional { color: #6e7681; font-size: 0.65rem; }
+
+  input, select, textarea {
+    width: 100%;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    color: #c9d1d9;
+    font-size: 0.8rem;
+    padding: 6px 10px;
+    transition: border-color 0.15s;
+    font-family: inherit;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #58a6ff;
+  }
+
+  select option { background: #161b22; }
+
+  .hint {
+    font-size: 0.68rem;
+    color: #6e7681;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  .hint code {
+    font-family: 'Courier New', monospace;
+    color: #79c0ff;
+    background: #21262d;
+    padding: 0 3px;
+    border-radius: 2px;
+    font-size: 0.65rem;
+  }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  .toggle-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-section input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+    accent-color: #58a6ff;
+  }
+
+  .toggle-section span { font-size: 0.75rem; color: #8b949e; }
+
+  .collapsible { display: none; }
+  .collapsible.active { display: block; }
+
+  /* Output panel */
+  .output-panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+    grid-column: 1 / -1;
+  }
+
+  .output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #21262d;
+    border-bottom: 1px solid #30363d;
+  }
+
+  .output-header span {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b949e;
+  }
+
+  .btn-group { display: flex; gap: 8px; }
+
+  button {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    color: #c9d1d9;
+    font-size: 0.75rem;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+
+  button:hover { background: #30363d; border-color: #58a6ff; color: #58a6ff; }
+
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover { background: #388bfd; border-color: #388bfd; color: #fff; }
+
+  pre {
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    padding: 16px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #c9d1d9;
+    min-height: 100px;
+  }
+
+  .preset-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .preset-card:hover { border-color: #58a6ff; background: #111923; }
+  .preset-card.selected {
+    border-color: #58a6ff;
+    background: #111923;
+    box-shadow: 0 0 0 1px #58a6ff33;
+  }
+  .preset-card-title { font-size: 0.8rem; font-weight: 700; color: #c9d1d9; margin-bottom: 4px; }
+  .preset-card-type {
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+    color: #79c0ff;
+    background: #21262d;
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-bottom: 6px;
+  }
+  .preset-card-desc { font-size: 0.7rem; color: #6e7681; line-height: 1.4; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #238636;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; }
+
+  .type-helper {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 0.7rem;
+  }
+
+  .type-tree { font-family: 'Courier New', monospace; color: #79c0ff; line-height: 1.8; }
+  .type-tree span { color: #f0883e; }
+</style>
+</head>
+<body>
+
+<h1>⚡ Cursor on Target (CoT) Message Builder</h1>
+<p class="subtitle">Fill in the fields below — the XML is generated automatically. Hover labels for field documentation.</p>
+
+<div class="layout">
+
+  <!-- ══════════════════════════════════════════════════════ LAUNCHER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">🚀 Process Launcher — Start TAK Tools from the Browser</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Run <code style="color:#79c0ff;">python3 tak_launcher.py</code> <em>once</em> from your venv — then control everything from here.
+      The launcher manages <code>tak_listener.py</code> and <code>tak_cot_proxy.py</code> as subprocesses, capturing their output below.
+    </div>
+
+    <!-- Launcher connection bar -->
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;">
+      <div class="field" style="margin:0;flex:0 0 240px;">
+        <label>Launcher API URL</label>
+        <input type="text" id="launcherUrl" value="http://localhost:8766" placeholder="http://localhost:8766"/>
+      </div>
+      <button class="primary" onclick="launcherConnect()" id="btnLauncherConnect" style="padding:7px 14px;">⚡ Connect to Launcher</button>
+      <div id="launcherStatusBadge"
+           style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:#0d1117;
+                  border:1px solid #30363d;border-radius:5px;font-size:0.75rem;color:#6e7681;">
+        <span id="launcherStatusDot" style="font-size:1rem;color:#444;">●</span>
+        <span id="launcherStatusText">Not connected — run tak_launcher.py first</span>
+      </div>
+    </div>
+
+    <!-- Two process cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+
+      <!-- ── TAK LISTENER card ── -->
+      <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:0.8rem;font-weight:700;color:#c9d1d9;">📻 tak_listener.py</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="listenerProcDot" style="color:#444;font-size:1.1rem;">●</span>
+            <span id="listenerProcStatus" style="font-size:0.7rem;color:#6e7681;">stopped</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field" style="margin:0;">
+            <label>TAK Server Host</label>
+            <input type="text" id="lp_host" value="10.10.10.3" placeholder="10.10.10.3"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>TCP Port</label>
+            <input type="number" id="lp_port" value="8088"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Callsign</label>
+            <input type="text" id="lp_callsign" value="CoT-Bridge"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>WebSocket Port</label>
+            <input type="number" id="lp_ws_port" value="8765"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Latitude (beacon)</label>
+            <input type="number" id="lp_lat" value="0.0" step="any"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Longitude (beacon)</label>
+            <input type="number" id="lp_lon" value="0.0" step="any"/>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field" style="margin:0;">
+            <label>Beacon Interval (s)</label>
+            <input type="number" id="lp_beacon_interval" value="30" min="5"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Filter UID prefix</label>
+            <input type="text" id="lp_filter_uid" placeholder="e.g. warthog (optional)"/>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.75rem;color:#8b949e;">
+            <input type="checkbox" id="lp_tls" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>TLS
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.75rem;color:#8b949e;">
+            <input type="checkbox" id="lp_verify_cert" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>Verify cert
+          </label>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button class="primary" onclick="launcherStart('listener')" id="btnStartListener"
+                  style="padding:7px 14px;" disabled>▶ Start</button>
+          <button onclick="launcherStop('listener')" id="btnStopListener"
+                  style="padding:7px 14px;border-color:#f85149;color:#f85149;display:none;">■ Stop</button>
+          <span id="listenerProcPid" style="font-size:0.68rem;color:#6e7681;align-self:center;"></span>
+        </div>
+      </div>
+
+      <!-- ── TAK PROXY card ── -->
+      <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:0.8rem;font-weight:700;color:#c9d1d9;">📡 tak_cot_proxy.py</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="proxyProcDot" style="color:#444;font-size:1.1rem;">●</span>
+            <span id="proxyProcStatus" style="font-size:0.7rem;color:#6e7681;">stopped</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field" style="margin:0;">
+            <label>TAK URL</label>
+            <input type="text" id="pp_tak_url" value="tcp://10.10.10.3:8088" placeholder="tcp://10.10.10.3:8088"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Proxy Port</label>
+            <input type="number" id="pp_proxy_port" value="8089"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>TAK API Path</label>
+            <input type="text" id="pp_tak_path" value="/"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label style="visibility:hidden;">spacer</label>
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:4px;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.75rem;color:#8b949e;">
+                <input type="checkbox" id="pp_no_verify_tls" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>Skip TLS verify
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.75rem;color:#8b949e;">
+                <input type="checkbox" id="pp_debug" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>Debug mode
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:5px;padding:8px 10px;
+                    margin-bottom:10px;font-size:0.7rem;color:#6e7681;line-height:1.5;">
+          Once running, set the CoT Builder server to:<br/>
+          <code style="color:#79c0ff;">http://localhost:<span id="proxyPortHint">8089</span></code>
+          with path <code style="color:#79c0ff;">/send</code>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button class="primary" onclick="launcherStart('proxy')" id="btnStartProxy"
+                  style="padding:7px 14px;" disabled>▶ Start</button>
+          <button onclick="launcherStop('proxy')" id="btnStopProxy"
+                  style="padding:7px 14px;border-color:#f85149;color:#f85149;display:none;">■ Stop</button>
+          <span id="proxyProcPid" style="font-size:0.68rem;color:#6e7681;align-self:center;"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Combined log output (tabbed) -->
+    <div>
+      <div style="display:flex;gap:0;margin-bottom:0;border-bottom:1px solid #30363d;">
+        <button id="logTabListener" onclick="switchLogTab('listener')"
+                style="border-radius:5px 5px 0 0;border-bottom:none;background:#21262d;
+                       color:#58a6ff;border-color:#30363d #30363d transparent;
+                       font-size:0.72rem;padding:5px 14px;">
+          tak_listener output
+        </button>
+        <button id="logTabProxy" onclick="switchLogTab('proxy')"
+                style="border-radius:5px 5px 0 0;border-bottom:none;background:#0d1117;
+                       color:#6e7681;border-color:#30363d #30363d transparent;
+                       font-size:0.72rem;padding:5px 14px;">
+          tak_cot_proxy output
+        </button>
+        <label style="margin-left:auto;display:flex;align-items:center;gap:6px;
+                      cursor:pointer;font-size:0.7rem;color:#6e7681;padding:0 10px;">
+          <input type="checkbox" id="logAutoScroll" checked
+                 style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>auto-scroll
+        </label>
+        <button onclick="clearLauncherLog()" style="font-size:0.68rem;padding:3px 10px;color:#6e7681;
+                border-radius:0 5px 0 0;">Clear</button>
+      </div>
+      <div id="launcherLogBox"
+           style="background:#0d1117;border:1px solid #30363d;border-top:none;border-radius:0 0 6px 6px;
+                  height:180px;overflow-y:auto;font-family:'Courier New',monospace;
+                  font-size:0.7rem;line-height:1.7;padding:10px;color:#6e7681;">
+        <span style="color:#444;">Connect to launcher to see output...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ LIVE LISTENER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">📻 Live TAK Listener — Receive from Server</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Connects to a local <code>tak_listener.py</code> WebSocket bridge, which in turn connects to your TAK server's TCP stream.
+      Received CoT messages appear in the queue below — click any row to load it into the analyzer above.
+      Start the bridge using the 🚀 Launcher above, or manually: <code style="color:#79c0ff;">python3 tak_listener.py --host 10.10.10.3 --port 8087 --callsign CoT-Bridge</code>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: connection controls -->
+      <div>
+        <div class="section-label">WebSocket Bridge Connection</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap;">
+          <div class="field" style="margin:0;flex:1;min-width:200px;">
+            <label>Bridge URL</label>
+            <input type="text" id="listenerWsUrl" value="ws://localhost:8765"
+                   placeholder="ws://localhost:8765"/>
+            <div class="hint">Must match <code>--ws-port</code> passed to <code>tak_listener.py</code></div>
+          </div>
+          <button class="primary" onclick="listenerConnect()" id="btnListenerConnect"
+                  style="padding:8px 16px;white-space:nowrap;">⚡ Connect</button>
+          <button onclick="listenerDisconnect()" id="btnListenerDisconnect"
+                  style="padding:8px 16px;display:none;border-color:#f85149;color:#f85149;white-space:nowrap;">■ Disconnect</button>
+        </div>
+
+        <!-- Status bar -->
+        <div id="listenerStatusBar"
+             style="background:#0d1117;border:1px solid #30363d;border-radius:6px;
+                    padding:8px 12px;font-size:0.75rem;display:flex;align-items:center;
+                    gap:8px;margin-bottom:12px;">
+          <span id="listenerStatusDot" style="font-size:1rem;color:#444;">●</span>
+          <span id="listenerStatusText" style="color:#6e7681;">Not connected</span>
+        </div>
+
+        <!-- Options -->
+        <div class="section-label">Options</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.78rem;color:#c9d1d9;">
+            <input type="checkbox" id="listenerAutoAnalyze"
+                   style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>
+            Auto-analyze — automatically load each incoming message into the analyzer
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.78rem;color:#c9d1d9;">
+            <input type="checkbox" id="listenerAutoScroll" checked
+                   style="width:auto;accent-color:#58a6ff;cursor:pointer;"/>
+            Auto-scroll message queue to latest
+          </label>
+        </div>
+
+        <!-- ── ENHANCED FILTER ─────────────────────────────────────────── -->
+        <div style="margin-top:12px;">
+          <div class="section-label" style="margin-bottom:10px;">Filters</div>
+
+          <!-- Quick type toggles -->
+          <div style="margin-bottom:10px;">
+            <div style="font-size:0.7rem;color:#8b949e;margin-bottom:6px;font-weight:600;">Show message types:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="Emergency alerts (b-a-o-*)">
+                <input type="checkbox" class="filterType" data-key="emergency" checked
+                       style="width:auto;accent-color:#f85149;" onchange="listenerApplyFilter()"/>🚨 Emergency
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="SA beacons (a-f-G, a-h-G, a-u-G, etc.)">
+                <input type="checkbox" class="filterType" data-key="sa" checked
+                       style="width:auto;accent-color:#58a6ff;" onchange="listenerApplyFilter()"/>📍 SA
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="GeoChat / b-t-f">
+                <input type="checkbox" class="filterType" data-key="chat" checked
+                       style="width:auto;accent-color:#58a6ff;" onchange="listenerApplyFilter()"/>💬 Chat
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="Spot map markers (b-m-p-s-m)">
+                <input type="checkbox" class="filterType" data-key="spot" checked
+                       style="width:auto;accent-color:#58a6ff;" onchange="listenerApplyFilter()"/>📌 Spot
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="Drawings / shapes (u-d-*)">
+                <input type="checkbox" class="filterType" data-key="drawing" checked
+                       style="width:auto;accent-color:#58a6ff;" onchange="listenerApplyFilter()"/>✏️ Drawing
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="Delete/drop messages (t-x-d-d)">
+                <input type="checkbox" class="filterType" data-key="delete" checked
+                       style="width:auto;accent-color:#58a6ff;" onchange="listenerApplyFilter()"/>🗑️ Delete
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;" title="Anything else">
+                <input type="checkbox" class="filterType" data-key="other" checked
+                       style="width:auto;accent-color:#58a6ff;" onchange="listenerApplyFilter()"/>❓ Other
+              </label>
+            </div>
+          </div>
+
+          <!-- Affiliation filter -->
+          <div style="margin-bottom:10px;">
+            <div style="font-size:0.7rem;color:#8b949e;margin-bottom:6px;font-weight:600;">Affiliation:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;">
+                <input type="checkbox" class="filterAffil" data-key="f" checked
+                       style="width:auto;accent-color:#3fb950;" onchange="listenerApplyFilter()"/>
+                <span style="color:#3fb950;">●</span> Friendly
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;">
+                <input type="checkbox" class="filterAffil" data-key="h" checked
+                       style="width:auto;accent-color:#f85149;" onchange="listenerApplyFilter()"/>
+                <span style="color:#f85149;">●</span> Hostile
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;">
+                <input type="checkbox" class="filterAffil" data-key="u" checked
+                       style="width:auto;accent-color:#f0883e;" onchange="listenerApplyFilter()"/>
+                <span style="color:#f0883e;">●</span> Unknown
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;">
+                <input type="checkbox" class="filterAffil" data-key="n" checked
+                       style="width:auto;accent-color:#79c0ff;" onchange="listenerApplyFilter()"/>
+                <span style="color:#79c0ff;">●</span> Neutral
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;">
+                <input type="checkbox" class="filterAffil" data-key="nonsa" checked
+                       style="width:auto;accent-color:#8b949e;" onchange="listenerApplyFilter()"/>
+                <span style="color:#8b949e;">●</span> Non-SA
+              </label>
+            </div>
+          </div>
+
+          <!-- Text search -->
+          <div class="field" style="margin:0 0 8px 0;">
+            <label>Search (uid / type / callsign contains):</label>
+            <input type="text" id="listenerFilter" placeholder="e.g. warthog  or  a-f-G  or  b-t-f"
+                   oninput="listenerApplyFilter()"/>
+          </div>
+
+          <!-- UID blocklist -->
+          <div class="field" style="margin:0 0 8px 0;">
+            <label>Block UIDs — always hide (comma-separated):</label>
+            <input type="text" id="listenerBlocklist"
+                   placeholder="ANDROID-abc123, warthog2, tak-listener-..."
+                   oninput="listenerApplyFilter()"/>
+            <div class="hint">Messages whose <code>uid</code> exactly matches any entry are silently dropped.</div>
+          </div>
+
+          <!-- Type prefix blocklist -->
+          <div class="field" style="margin:0;">
+            <label>Block CoT types — always hide (comma-separated prefixes):</label>
+            <input type="text" id="listenerTypeBlocklist"
+                   placeholder="e.g. t-x-c-t, b-i-x-i"
+                   oninput="listenerApplyFilter()"/>
+            <div class="hint">Hides any message whose type <em>starts with</em> any entry. e.g. <code>t-x-c-t</code> blocks SA pings; <code>b-i</code> blocks all file transfers.</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <span id="listenerCounter"
+                style="font-size:0.72rem;color:#6e7681;">Received: 0 messages</span>
+          <button onclick="listenerClearQueue()"
+                  style="margin-left:12px;font-size:0.68rem;padding:3px 10px;color:#6e7681;">
+            Clear queue
+          </button>
+        </div>
+      </div>
+
+      <!-- RIGHT: message queue -->
+      <div>
+        <div class="section-label">Received Message Queue
+          <span style="font-weight:400;font-size:0.68rem;color:#6e7681;text-transform:none;
+                       letter-spacing:0;margin-left:8px;">Click a row to load into analyzer</span>
+          <label style="float:right;display:flex;align-items:center;gap:6px;cursor:pointer;
+                        font-size:0.68rem;color:#8b949e;font-weight:400;text-transform:none;
+                        letter-spacing:0;border:none;padding:0;margin:0;">
+            <input type="checkbox" id="showFullXml" checked
+                   style="width:auto;accent-color:#58a6ff;cursor:pointer;"
+                   onchange="listenerApplyFilter()"/>
+            Show full XML
+          </label>
+        </div>
+        <div id="listenerQueue"
+             style="background:#0d1117;border:1px solid #30363d;border-radius:6px;
+                    height:280px;overflow-y:auto;font-size:0.72rem;font-family:'Courier New',monospace;">
+          <div style="padding:16px;color:#444;text-align:center;">
+            Connect to see incoming messages...
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Selected message detail -->
+    <div id="listenerSelectedDetail" style="display:none;margin-top:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="section-label" style="margin:0;">Selected Message</div>
+          <div id="listenerPausedBadge"
+               style="display:none;background:#2d2218;border:1px solid #f0883e66;
+                      border-radius:4px;padding:2px 8px;font-size:0.68rem;color:#f0883e;">
+            ⏸ auto-analyze paused
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="listenerResume()" id="btnListenerResume"
+                  style="font-size:0.75rem;padding:5px 12px;display:none;
+                         border-color:#3fb950;color:#3fb950;">
+            ▶ Resume auto-analyze
+          </button>
+          <button onclick="listenerLoadSelected()" style="font-size:0.75rem;padding:5px 12px;">
+            ↑ Load into Analyzer
+          </button>
+          <button onclick="listenerCopySelected()" style="font-size:0.75rem;padding:5px 12px;">
+            ⎘ Copy XML
+          </button>
+        </div>
+      </div>
+      <pre id="listenerSelectedXml"
+           style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:10px;
+                  font-size:0.68rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;
+                  max-height:200px;overflow-y:auto;"></pre>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ RAW CoT PARSER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">🔍 Raw CoT Analyzer — Paste &amp; Parse</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Paste any raw CoT XML — from the TAK server stream, ATAK, or a log file. Click Analyze to break it down and optionally load it into the form fields.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: Input -->
+      <div>
+        <div class="section-label">Raw CoT XML Input</div>
+        <textarea id="rawCotInput" rows="10"
+          style="font-family:'Courier New',monospace;font-size:0.72rem;line-height:1.5;resize:vertical;"
+          placeholder="Paste raw CoT XML here...&#10;&#10;e.g. &lt;event version=&quot;2.0&quot; uid=&quot;...&quot; type=&quot;a-f-G-U-C&quot; ...&gt;&#10;  &lt;point .../&gt;&#10;  &lt;detail&gt;...&lt;/detail&gt;&#10;&lt;/event&gt;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+          <button class="primary" onclick="parseRawCoT()" style="font-size:0.8rem;padding:7px 16px;">🔍 Analyze</button>
+          <button onclick="parseAndLoad()" style="font-size:0.8rem;padding:7px 16px;" title="Parse and load all fields into the form below">↓ Load into Form</button>
+          <button onclick="parseAndSend()" style="font-size:0.8rem;padding:7px 16px;" title="Send this raw XML directly — timestamps are NOT updated">▶ Send As-Is</button>
+          <button onclick="parseAndSendFresh()" style="font-size:0.8rem;padding:7px 16px;" title="Send with timestamps updated to now">▶ Send with Fresh Timestamps</button>
+          <button onclick="document.getElementById('rawCotInput').value='';clearParseResults();" style="font-size:0.68rem;padding:5px 10px;color:#6e7681;">✕ Clear</button>
+          <div id="analyzerSendStatus" style="display:none;align-items:center;gap:6px;
+               padding:4px 10px;border-radius:4px;font-size:0.73rem;font-weight:600;
+               background:#0d1117;border:1px solid #30363d;">
+            <span id="analyzerSendIcon">●</span>
+            <span id="analyzerSendText"></span>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:8px;">
+          Tip: paste directly from any of these sources — the analyzer handles each format automatically:<br/>
+          • TAK server stream (<code>http://10.10.10.3:8088</code>) — strips <code>data: '...'</code> wrapper<br/>
+          • ROS2 <code>ros2 topic echo /warthog1/incoming_cot</code> — unescapes <code>\"</code> and <code>\n</code><br/>
+          • Plain CoT XML — used as-is
+        </div>
+      </div>
+
+      <!-- RIGHT: Analysis output -->
+      <div>
+        <div class="section-label" id="parseResultLabel" style="display:none;">Analysis</div>
+        <div id="parseResults" style="display:none;">
+          <div id="parseError" style="display:none;background:#1a0d0d;border:1px solid #f85149;border-radius:5px;padding:10px;font-size:0.75rem;color:#f85149;margin-bottom:10px;"></div>
+          <div id="parseTable" style="display:none;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+              <thead>
+                <tr style="border-bottom:1px solid #30363d;">
+                  <th style="text-align:left;padding:4px 8px;color:#6e7681;font-weight:600;width:38%;">Field</th>
+                  <th style="text-align:left;padding:4px 8px;color:#6e7681;font-weight:600;">Value</th>
+                </tr>
+              </thead>
+              <tbody id="parseTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ DELETE MARKER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">🗑️ Delete Marker</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Two methods — try <strong style="color:#c9d1d9;">Force Delete</strong> first (works on <code>&lt;archive/&gt;</code> markers).
+      If that fails, use <strong style="color:#c9d1d9;">Null Island</strong> to move the marker off the map instead.
+      Paste the full CoT XML to auto-fill all fields.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: inputs -->
+      <div>
+        <div class="section-label">Auto-fill from CoT XML</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <textarea id="deletePasteInput" rows="4"
+            style="flex:1;font-family:'Courier New',monospace;font-size:0.7rem;
+                   line-height:1.5;resize:vertical;"
+            placeholder="Paste the CoT XML of the marker you want to delete..."></textarea>
+          <button onclick="deleteAutoFill()"
+                  style="align-self:flex-start;padding:7px 12px;white-space:nowrap;">
+            ↓ Parse
+          </button>
+        </div>
+
+        <div class="section-label">Fields</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div class="field" style="margin:0;grid-column:1/-1;">
+            <label><span class="tag">uid</span> Target UID <span class="required">required</span></label>
+            <input type="text" id="deleteUid" placeholder="ef8886df-0e7b-4fa9-b798-5054e0dbf43f"
+                   oninput="buildDeleteXml()" onchange="buildDeleteXml()"/>
+            <div class="hint">The UID of the marker to delete — from the CoT's envelope <code>uid</code> attribute.</div>
+          </div>
+          <div class="field" style="margin:0;">
+            <label><span class="tag">type</span> CoT Type</label>
+            <input type="text" id="deleteType" placeholder="b-m-p-s-m"
+                   oninput="buildDeleteXml()" onchange="buildDeleteXml()"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Original Lat</label>
+            <input type="number" id="deleteOrigLat" step="any" placeholder="39.352"
+                   oninput="buildDeleteXml()" onchange="buildDeleteXml()"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Original Lon</label>
+            <input type="number" id="deleteOrigLon" step="any" placeholder="-76.344"
+                   oninput="buildDeleteXml()" onchange="buildDeleteXml()"/>
+          </div>
+          <!-- Null island fallback fields -->
+          <div class="field" style="margin:0;">
+            <label><span class="tag">callsign</span> Replacement Callsign <span style="color:#6e7681;font-size:0.68rem;">(null island only)</span></label>
+            <input type="text" id="deleteCallsign" value="DELETE ME"
+                   oninput="buildDeleteXml()" onchange="buildDeleteXml()"/>
+          </div>
+        </div>
+
+        <!-- Method selector -->
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;
+                    padding:12px;margin-bottom:14px;">
+          <div style="font-size:0.72rem;font-weight:700;color:#8b949e;margin-bottom:10px;">Delete Method</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <label style="display:flex;gap:10px;cursor:pointer;align-items:flex-start;">
+              <input type="radio" name="deleteMethod" value="forcedelete" checked
+                     style="width:auto;accent-color:#58a6ff;margin-top:2px;cursor:pointer;"
+                     onchange="buildDeleteXml()"/>
+              <div>
+                <div style="font-size:0.78rem;color:#c9d1d9;font-weight:600;">⚡ Force Delete <span style="color:#3fb950;font-size:0.68rem;font-weight:400;">— recommended, confirmed working</span></div>
+                <div style="font-size:0.68rem;color:#6e7681;margin-top:2px;">Sends <code>t-x-d-d</code> with <code>&lt;__forcedelete/&gt;</code> tag. Works on archived markers. Use this first.</div>
+              </div>
+            </label>
+            <label style="display:flex;gap:10px;cursor:pointer;align-items:flex-start;">
+              <input type="radio" name="deleteMethod" value="nullisland"
+                     style="width:auto;accent-color:#58a6ff;margin-top:2px;cursor:pointer;"
+                     onchange="buildDeleteXml()"/>
+              <div>
+                <div style="font-size:0.78rem;color:#c9d1d9;font-weight:600;">🌊 Null Island Overwrite <span style="color:#f0883e;font-size:0.68rem;font-weight:400;">— fallback</span></div>
+                <div style="font-size:0.68rem;color:#6e7681;margin-top:2px;">Overwrites marker coords with 0°N 0°E and expired stale. Moves it off the map. Use if force delete fails.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="primary" onclick="sendDeleteMarker()"
+                  style="padding:8px 20px;font-size:0.85rem;">
+            🗑️ Delete Marker
+          </button>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:0.72rem;color:#8b949e;white-space:nowrap;">Send</label>
+            <select id="deleteRepeatCount" style="width:auto;padding:5px 8px;font-size:0.72rem;">
+              <option value="1">1×</option>
+              <option value="3" selected>3×</option>
+              <option value="5">5×</option>
+              <option value="10">10×</option>
+            </select>
+            <label style="font-size:0.72rem;color:#6e7681;white-space:nowrap;">times</label>
+          </div>
+          <button onclick="copyDeleteXml()" style="padding:8px 14px;">⎘ Copy XML</button>
+          <div id="deleteSendStatus" style="display:none;align-items:center;gap:6px;
+               padding:4px 10px;border-radius:4px;font-size:0.73rem;font-weight:600;
+               background:#0d1117;border:1px solid #30363d;">
+            <span id="deleteSendIcon">●</span>
+            <span id="deleteSendText"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: preview -->
+      <div>
+        <div class="section-label">Generated XML Preview</div>
+        <pre id="deletePreviewXml"
+             style="background:#0d1117;border:1px solid #30363d;border-radius:5px;
+                    padding:12px;font-size:0.68rem;line-height:1.5;white-space:pre-wrap;
+                    word-break:break-all;height:100%;min-height:200px;
+                    color:#6e7681;font-style:italic;">Fill in UID to see generated XML...</pre>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ LEFT PANEL -->
+  <div class="panel">
+    <div class="panel-title">Event Envelope</div>
+
+    <!-- IDENTITY -->
+    <div class="section">
+      <div class="section-label">Identity</div>
+
+      <div class="field">
+        <label><span class="tag">uid</span> Unique Identifier <span class="required">required</span></label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="uid" placeholder="ANDROID-dfac01d76beec661  or  a UUID  or  robot-name-serialno"/>
+          <button type="button" onclick="generateUID()" title="Generate a random UUID" style="white-space:nowrap;flex-shrink:0;">⚄ Gen UUID</button>
+        </div>
+        <div class="hint">Must be globally unique and stable for this entity. Device beacons use <code>ANDROID-xxxx</code>. Robots can use <code>ugv_warthog-hostname</code>. Manual markers use a random UUID.</div>
+      </div>
+
+      <div class="field">
+        <label><span class="tag">callsign</span> Callsign <span class="required">required</span></label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="callsign" placeholder="TRILL / test_robot1 / ALPHA-2"/>
+          <button type="button" onclick="generateCallsign()" title="Generate a random NATO callsign" style="white-space:nowrap;flex-shrink:0;">⚄ Gen Callsign</button>
+        </div>
+        <div class="hint">Human-readable name shown on the ATAK map.</div>
+      </div>
+    </div>
+
+    <!-- TYPE -->
+    <div class="section">
+      <div class="section-label">Event Type</div>
+
+      <div class="field">
+        <label><span class="tag">type</span> CoT Type String <span class="required">required</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="type" placeholder="a-f-G-U-C" oninput="updateTypeHelper()"/>
+          <select id="typePreset" onchange="applyTypePreset()" style="width:auto;white-space:nowrap;">
+            <option value="">— presets —</option>
+            <optgroup label="Friendly">
+              <option value="a-f-G-U-C">Friendly Ground Infantry</option>
+              <option value="a-f-G-U-C-I">Friendly Ground Infantry (Individual)</option>
+              <option value="a-f-G-U-C-F">Friendly Ground Infantry (Leader)</option>
+              <option value="a-f-G-E-V">Friendly Ground Vehicle (Equipment)</option>
+              <option value="a-f-G-U-C-R">Friendly UGV — Combat Reconnaissance (verified)</option>
+              <option value="a-f-G-U-C-V-U">Friendly UAV — Generic (Ground classification)</option>
+              <option value="a-f-G-U-C-V-U-R">Friendly UAV — Rotary Wing / Quadcopter (Ground classification)</option>
+              <option value="a-f-G-U-C-V-U-F">Friendly UAV — Fixed Wing (Ground classification)</option>
+              <option value="a-f-A-M-H-Q">Friendly UAV — Rotary Wing Drone RPV (Air classification)</option>
+            </optgroup>
+            <optgroup label="Hostile">
+              <option value="a-h-G-U-C">Hostile Ground Infantry</option>
+              <option value="a-h-G-E-V">Hostile Ground Vehicle</option>
+              <option value="a-h-G-U-C-V-U">Hostile UAV — Generic</option>
+              <option value="a-h-G-U-C-V-U-R">Hostile UAV — Rotary Wing</option>
+              <option value="a-h-G-U-C-V-U-F">Hostile UAV — Fixed Wing</option>
+              <option value="a-h-A-M-H-Q">Hostile UAV — Rotary Wing Drone RPV (Air)</option>
+            </optgroup>
+            <optgroup label="Unknown">
+              <option value="a-u-G">Unknown Ground</option>
+              <option value="a-u-A">Unknown Air</option>
+            </optgroup>
+            <optgroup label="Neutral">
+              <option value="a-n-G-U-C">Neutral Ground Infantry</option>
+            </optgroup>
+            <optgroup label="Special">
+              <option value="b-t-f">TAK Chat Message</option>
+              <option value="b-i-x-i">GeoChat</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="type-helper" id="typeHelper">
+          <div class="type-tree">Select a type or type above to see breakdown</div>
+        </div>
+        <div class="hint" style="margin-top:6px;">Format: <code>atom - affiliation - battle_dimension - category - subcategory</code></div>
+      </div>
+
+      <div class="field">
+        <label><span class="tag">how</span> How Determined <span class="required">required</span></label>
+        <select id="how">
+          <option value="m-g">m-g — Machine GPS (autonomous system, robot)</option>
+          <option value="h-e">h-e — Human Entered (manually typed coordinates)</option>
+          <option value="h-g-i-g-o">h-g-i-g-o — Human tapped map (long-press drop pin)</option>
+          <option value="h-c">h-c — Human calculated</option>
+          <option value="m-i">m-i — Machine inferred</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- TIMING -->
+    <div class="section">
+      <div class="section-label">Timing</div>
+      <div class="field">
+        <label>Stale Duration (minutes) <span class="required">required</span></label>
+        <input type="number" id="staleMins" value="5" min="1" max="1440"/>
+        <div class="hint"><code>time</code> and <code>start</code> are set to now automatically. Stale = now + this many minutes.</div>
+      </div>
+    </div>
+
+    <!-- POSITION -->
+    <div class="section">
+      <div class="section-label">Position</div>
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">lat</span> Latitude <span class="required">required</span></label>
+          <input type="number" id="lat" step="0.0000001" placeholder="41.3912267"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">lon</span> Longitude <span class="required">required</span></label>
+          <input type="number" id="lon" step="0.0000001" placeholder="-73.9527021"/>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label><span class="tag">hae</span> Height Above Ellipsoid (m)</label>
+          <input type="number" id="hae" step="0.1" value="0" placeholder="-32.2"/>
+          <div class="hint">WGS84 ellipsoid height. Use <code>0</code> if unknown.</div>
+        </div>
+        <div class="field">
+          <label><span class="tag">ce</span> Circular Error (m)</label>
+          <input type="number" id="ce" value="9999999.0" placeholder="9999999.0"/>
+          <div class="hint"><code>9999999</code> = unknown. Use <code>10</code> for good GPS.</div>
+        </div>
+        <div class="field">
+          <label><span class="tag">le</span> Linear Error (m)</label>
+          <input type="number" id="le" value="9999999.0" placeholder="9999999.0"/>
+          <div class="hint">Vertical position uncertainty. Same convention as ce.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ RIGHT PANEL -->
+  <div class="panel">
+    <div class="panel-title">Detail Block</div>
+
+    <!-- GROUP -->
+    <div class="section">
+      <div class="section-label">Team / Group</div>
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">__group name</span> Color</label>
+          <select id="groupColor">
+            <option value="Cyan">Cyan</option>
+            <option value="Blue">Blue</option>
+            <option value="Red">Red</option>
+            <option value="Green">Green</option>
+            <option value="Yellow">Yellow</option>
+            <option value="White">White</option>
+            <option value="Purple">Purple</option>
+            <option value="Maroon">Maroon</option>
+          </select>
+        </div>
+        <div class="field">
+          <label><span class="tag">__group role</span> Role</label>
+          <select id="groupRole">
+            <option value="Team Lead">Team Lead</option>
+            <option value="Team Member">Team Member</option>
+            <option value="HQ">HQ</option>
+            <option value="Sniper">Sniper</option>
+            <option value="Medic">Medic</option>
+            <option value="Forward Observer">Forward Observer</option>
+            <option value="RTO">RTO</option>
+            <option value="K9">K9</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRACK -->
+    <div class="section">
+      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Track (Movement)</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.7rem;color:#8b949e;font-weight:500;text-transform:none;letter-spacing:0;border:none;padding:0;margin:0;">
+          <input type="checkbox" id="enableTrack" checked style="width:auto;accent-color:#58a6ff;cursor:pointer;" onchange="generateXML()"/>
+          include in XML
+        </label>
+      </div>
+      <div id="trackSection">
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">speed</span> Speed (m/s)</label>
+            <input type="number" id="speed" step="0.01" value="0.0" placeholder="0.0"/>
+            <div class="hint">⚠️ ATAK only renders the orientation arrow when speed ≥ 1.4 m/s. Use 0.0 for stationary.</div>
+          </div>
+          <div class="field">
+            <label><span class="tag">course</span> Heading (° true north)</label>
+            <input type="number" id="course" step="0.01" value="0.0" min="0" max="360" placeholder="0.0"/>
+            <div class="hint">0 = North, 90 = East, 180 = South, 270 = West</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLATFORM -->
+    <div class="section">
+      <div class="section-label">Platform / Client</div>
+      <div class="field">
+        <label>Platform Preset</label>
+        <select id="platformPreset" onchange="applyPlatformPreset()">
+          <option value="">— choose or fill manually —</option>
+          <option value="atak_android">ATAK (Android Phone)</option>
+          <option value="wintak">WinTAK (Windows)</option>
+          <option value="pytak_robot">PyTAK Robot (Ubuntu)</option>
+          <option value="pytak_drone">PyTAK Drone (Ubuntu)</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">takv device</span> Device Name</label>
+          <input type="text" id="takvDevice" placeholder="SAMSUNG SM-G736U1"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">takv platform</span> Platform</label>
+          <input type="text" id="takvPlatform" placeholder="ATAK"/>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label><span class="tag">takv os</span> OS</label>
+          <input type="text" id="takvOs" placeholder="36 (Android API level) or Ubuntu 24.04"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">takv version</span> TAK Version</label>
+          <input type="text" id="takvVersion" placeholder="5.6.0.12 or 5.3.0.155"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATUS -->
+    <div class="section">
+      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Status</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.7rem;color:#8b949e;font-weight:500;text-transform:none;letter-spacing:0;border:none;padding:0;margin:0;">
+          <input type="checkbox" id="enableBattery" checked style="width:auto;accent-color:#58a6ff;cursor:pointer;" onchange="generateXML()"/>
+          include battery in XML
+        </label>
+      </div>
+      <div class="row2">
+        <div class="field" id="batteryField">
+          <label><span class="tag">battery</span> Battery %</label>
+          <input type="number" id="battery" min="0" max="100" value="100"/>
+        </div>
+        <div class="field">
+          <label><span class="tag">endpoint</span> Contact Endpoint</label>
+          <input type="text" id="endpoint" value="*:-1:stcp"/>
+          <div class="hint"><code>*:-1:stcp</code> = relay via TAK server (most common)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPTIONAL SECTIONS -->
+    <div class="section">
+      <div class="section-label">Optional Sections</div>
+
+      <div class="toggle-section">
+        <input type="checkbox" id="enablePrecision" onchange="toggleSection('precisionSection', this)"/>
+        <span>Include &lt;precisionlocation&gt; (ATAK devices)</span>
+      </div>
+      <div id="precisionSection" class="collapsible">
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">geopointsrc</span> Geo Point Source</label>
+            <select id="geopointsrc">
+              <option value="USER">USER (manually placed)</option>
+              <option value="GPS">GPS</option>
+              <option value="CALCULATED">CALCULATED</option>
+            </select>
+          </div>
+          <div class="field">
+            <label><span class="tag">altsrc</span> Altitude Source</label>
+            <select id="altsrc">
+              <option value="SRTM1">SRTM1 (terrain lookup)</option>
+              <option value="GPS">GPS</option>
+              <option value="DTED0">DTED0</option>
+              <option value="DTED1">DTED1</option>
+              <option value="DTED2">DTED2</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableArchive"/>
+        <span>Include &lt;archive/&gt; (persistent marker — survives stale)</span>
+      </div>
+
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableMilsym" onchange="toggleSection('milsymSection', this)"/>
+        <span>Include MIL-STD-2525C symbol codes</span>
+      </div>
+      <div id="milsymSection" class="collapsible">
+        <div class="field">
+          <label><span class="tag">__milsym id</span> 2525C Symbol ID</label>
+          <input type="text" id="milsymId" placeholder="SFG*EV----*****"/>
+          <div class="hint">Position: <code>S=Symbol F=Affiliation B=BattleDim *=Status FunctionID Modifiers</code></div>
+        </div>
+      </div>
+
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableLink" onchange="toggleSection('linkSection', this)"/>
+        <span>Include &lt;link&gt; (associate with parent entity)</span>
+      </div>
+      <div id="linkSection" class="collapsible">
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">link uid</span> Parent UID</label>
+            <input type="text" id="linkUid" placeholder="ANDROID-dfac01d76beec661"/>
+          </div>
+          <div class="field">
+            <label><span class="tag">parent_callsign</span></label>
+            <input type="text" id="linkCallsign" placeholder="TRILL"/>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label><span class="tag">relation</span></label>
+            <select id="linkRelation">
+              <option value="p-p">p-p (part of)</option>
+              <option value="c-c">c-c (connected to)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label><span class="tag">type</span> Parent Type</label>
+            <input type="text" id="linkType" placeholder="a-f-G-U-C"/>
+          </div>
+        </div>
+      </div>
+
+      <div class="toggle-section" style="margin-top:10px;">
+        <input type="checkbox" id="enableRemarks" onchange="toggleSection('remarksSection', this)"/>
+        <span>Include &lt;remarks&gt;</span>
+      </div>
+      <div id="remarksSection" class="collapsible">
+        <div class="field">
+          <textarea id="remarks" rows="2" placeholder="Free text remarks visible in ATAK..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ TAK SERVER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">📡 TAK Server — Send CoT</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: Connection config -->
+      <div>
+        <div class="section-label">Connection</div>
+        <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px 12px;margin-bottom:14px;">
+          <div style="font-size:0.7rem;font-weight:700;color:#58a6ff;margin-bottom:8px;letter-spacing:0.04em;">⚡ LOCAL PROXY SHORTCUT</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:0.75rem;color:#8b949e;white-space:nowrap;">http://localhost:</span>
+            <input type="number" id="proxyPort" placeholder="5555" min="1" max="65535"
+                   style="width:90px;flex-shrink:0;" oninput="applyProxyShortcut()"/>
+            <button type="button" onclick="applyProxyShortcut()" style="white-space:nowrap;flex-shrink:0;">→ Fill URL</button>
+            <span style="font-size:0.68rem;color:#6e7681;line-height:1.3;">
+              Fills the fields below with <code style="font-size:0.65rem;color:#79c0ff;background:#21262d;padding:0 3px;border-radius:2px;">localhost</code> + proxy path automatically
+            </span>
+          </div>
+        </div>
+
+        <div class="row2" style="margin-bottom:10px;">
+          <div class="field">
+            <label><span class="tag">Server URL</span> Base URL <span class="required">required</span></label>
+            <input type="text" id="takServerUrl" placeholder="http://10.0.0.1:8088" oninput="updateEndpointPreview()"/>
+            <div class="hint">Protocol + host + port. e.g. <code>http://10.10.10.3:8088</code></div>
+          </div>
+          <div class="field">
+            <label><span class="tag">API Path</span></label>
+            <input type="text" id="takApiPath" value="/Marti/api/cot" oninput="updateEndpointPreview()"/>
+            <div class="hint">Local proxy: <code>/send</code> &nbsp;|&nbsp; TAK Server: <code>/Marti/api/cot</code></div>
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:6px;">
+          <label>Full endpoint preview</label>
+          <div id="endpointPreview" style="font-family:'Courier New',monospace;font-size:0.72rem;color:#79c0ff;background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:6px 10px;word-break:break-all;">—</div>
+        </div>
+
+        <div class="section-label" style="margin-top:14px;">Authentication</div>
+        <div class="field">
+          <label>Auth Type</label>
+          <select id="takAuthType" onchange="updateAuthFields()">
+            <option value="none">None (open server / already on VPN)</option>
+            <option value="basic">Basic Auth (username + password)</option>
+            <option value="apikey">API Key / Bearer Token</option>
+          </select>
+        </div>
+        <div id="authBasicFields" style="display:none;">
+          <div class="row2">
+            <div class="field">
+              <label>Username</label>
+              <input type="text" id="takUser" placeholder="tak_admin" autocomplete="off"/>
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input type="password" id="takPass" placeholder="••••••••" autocomplete="off"/>
+            </div>
+          </div>
+        </div>
+        <div id="authTokenField" style="display:none;">
+          <div class="field">
+            <label>Bearer Token / API Key</label>
+            <input type="text" id="takToken" placeholder="eyJhbGciOiJIUzI1NiIs..." autocomplete="off"/>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="takIgnoreTls" style="width:auto;accent-color:#58a6ff;"/>
+            <span style="font-size:0.75rem;color:#8b949e;">Skip TLS certificate verification</span>
+          </label>
+          <div class="hint" style="margin-top:3px;">⚠️ Only for self-signed certs on trusted networks. If your TAK server uses a self-signed cert, visit the URL in your browser first and accept the security exception, then return here.</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Send controls + log -->
+      <div>
+        <div class="section-label">Transmit</div>
+        <div class="row2" style="margin-bottom:12px;">
+          <div class="field">
+            <label>Repeat Send</label>
+            <select id="takRepeatMode" onchange="updateRepeatUI()">
+              <option value="once">Send once</option>
+              <option value="repeat">Repeat on interval</option>
+            </select>
+          </div>
+          <div class="field" id="takIntervalField" style="display:none;">
+            <label>Interval (seconds)</label>
+            <input type="number" id="takInterval" value="10" min="1" max="3600"/>
+            <div class="hint">Regenerates timestamps each send.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+          <button class="primary" onclick="sendCoT()" id="btnSend" style="font-size:0.85rem;padding:8px 20px;">▶ Send CoT</button>
+          <button onclick="stopRepeat()" id="btnStop" style="display:none;font-size:0.85rem;padding:8px 20px;border-color:#f85149;color:#f85149;">■ Stop</button>
+          <div id="repeatCounterBadge" style="display:none;align-items:center;padding:0 12px;background:#21262d;border:1px solid #30363d;border-radius:5px;font-size:0.75rem;color:#8b949e;">
+            Sent: <span id="repeatCounter" style="color:#58a6ff;font-weight:700;margin-left:4px;">0</span>
+          </div>
+        </div>
+
+        <div id="takStatusBox" style="display:none;background:#0d1117;border:1px solid #30363d;border-radius:6px;overflow:hidden;margin-bottom:12px;">
+          <div id="takStatusBar" style="padding:8px 12px;font-size:0.75rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+            <span id="takStatusIcon">●</span>
+            <span id="takStatusText">—</span>
+            <span id="takStatusCode" style="margin-left:auto;font-family:'Courier New',monospace;font-size:0.7rem;opacity:0.7;"></span>
+          </div>
+        </div>
+
+        <div class="section-label">Activity Log</div>
+        <div id="takLog" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:10px;height:160px;overflow-y:auto;font-family:'Courier New',monospace;font-size:0.7rem;line-height:1.7;color:#6e7681;">
+          <span style="color:#444;">Waiting for first send...</span>
+        </div>
+        <button onclick="clearLog()" style="margin-top:6px;font-size:0.68rem;padding:3px 10px;color:#6e7681;">Clear log</button>
+
+        <div class="hint" style="margin-top:12px;">
+          ⚠️ <strong style="color:#8b949e;">CORS note:</strong> Browsers block cross-origin requests unless the TAK server sends <code>Access-Control-Allow-Origin</code> headers. If sends fail with a network error, use a local reverse proxy. See log for details.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ CHAT COMPOSER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">💬 GeoChat Message Composer</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Compose and send TAK chat messages (type <code>b-t-f</code>). Each send generates a fresh message UUID so messages are not deduplicated by the TAK server.
+    </div>
+
+    <!-- Mode toggle -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeDirect" value="direct" checked onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/> Direct Message
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeGroup" value="group" onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/> Group Message
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeTeam" value="team" onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/> Team Color Broadcast
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeRole" value="role" onchange="updateChatMode()" style="width:auto;accent-color:#58a6ff;cursor:pointer;"/> Role Broadcast
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeAll" value="all" onchange="updateChatMode()" style="width:auto;accent-color:#f85149;cursor:pointer;"/> 🔴 All Chat Rooms
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeAllGroups" value="allgroups" onchange="updateChatMode()" style="width:auto;accent-color:#f0883e;cursor:pointer;"/> 🟠 All Groups
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.8rem;color:#c9d1d9;">
+        <input type="radio" name="chatMode" id="chatModeAllTeams" value="allteams" onchange="updateChatMode()" style="width:auto;accent-color:#3fb950;cursor:pointer;"/> 🟢 All Teams
+      </label>
+    </div>
+
+    <!-- Sender fields -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div class="field" style="margin:0;">
+        <label><span class="tag">senderCallsign</span> Your Callsign</label>
+        <input type="text" id="chatSenderCallsign" placeholder="FOXTROT-6" value="FOXTROT-6"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label><span class="tag">uid0</span> Sender Device UID</label>
+        <input type="text" id="chatSenderUid" placeholder="ANDROID-example0000000001" value="ANDROID-example0000000001"/>
+        <div class="hint">Your device UID — <code>ANDROID-xxxx</code> for ATAK devices.</div>
+      </div>
+    </div>
+
+    <!-- Direct -->
+    <div id="chatDirectFields">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom</span> Chatroom Name (display)</label>
+          <input type="text" id="chatRecipient" placeholder="warthog1" value="warthog1"/>
+        </div>
+        <div class="field" style="margin:0;">
+          <label><span class="tag">id / uid1</span> Recipient Device UID <span class="required">required</span></label>
+          <input type="text" id="chatRecipientUid" placeholder="warthog1" value="warthog1"/>
+          <div class="hint">Warthog: <code>warthog1</code>, <code>warthog2</code>. ATAK: <code>ANDROID-xxxx</code>.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group -->
+    <div id="chatGroupFields" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom</span> Group Name (display)</label>
+          <input type="text" id="chatGroupName" placeholder="TRILL GROUP" value=""/>
+        </div>
+        <div class="field" style="margin:0;">
+          <label><span class="tag">id</span> Group UUID</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="chatGroupUid" placeholder="auto-generated"/>
+            <button type="button" onclick="document.getElementById('chatGroupUid').value=genUuid();buildChatXml();" style="white-space:nowrap;flex-shrink:0;font-size:0.7rem;padding:4px 8px;">⚄ Gen</button>
+          </div>
+        </div>
+      </div>
+      <div class="section-label" style="margin-bottom:8px;">Group Members</div>
+      <div id="chatMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+      <button type="button" onclick="addChatMember()" style="font-size:0.72rem;padding:5px 12px;margin-bottom:12px;">+ Add Member</button>
+    </div>
+
+    <!-- Team -->
+    <div id="chatTeamFields" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom / id</span> Team Color</label>
+          <select id="chatTeamColor" onchange="buildChatXml()">
+            <option value="Cyan">Cyan</option><option value="Blue">Blue</option>
+            <option value="Red">Red</option><option value="Green">Green</option>
+            <option value="Yellow">Yellow</option><option value="White">White</option>
+            <option value="Purple">Purple</option><option value="Maroon">Maroon</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Additional Recipients (optional)</label>
+          <div id="chatTeamMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+          <button type="button" onclick="addTeamMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Role -->
+    <div id="chatRoleFields" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="field" style="margin:0;">
+          <label><span class="tag">chatroom / id</span> Role</label>
+          <select id="chatRoleName" onchange="onRoleSelectChange()">
+            <option value="HQ">HQ</option><option value="Team Member">Team Member</option>
+            <option value="Team Lead">Team Lead</option><option value="Sniper">Sniper</option>
+            <option value="Medic">Medic</option><option value="Forward Observer">Forward Observer</option>
+            <option value="RTO">RTO</option><option value="K9">K9</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="text" id="chatRoleCustom" placeholder="Custom role name" style="display:none;margin-top:6px;" oninput="buildChatXml()" onchange="buildChatXml()"/>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Recipients <span style="color:#6e7681;font-size:0.7rem;">(uid1, uid2, …)</span></label>
+          <div id="chatRoleMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+          <button type="button" onclick="addRoleMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Chat Rooms -->
+    <div id="chatAllFields" style="display:none;">
+      <div style="background:#2d1b1b;border:1px solid #f8514966;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;color:#ffa198;line-height:1.6;">
+        ⚠️ <strong>Global broadcast</strong> — delivers to <em>all</em> connected devices on the TAK server.
+        Uses the reserved literal <code style="color:#ff7b72;">"All Chat Rooms"</code> as both <code>chatroom</code>, <code>id</code>, and <code>uid1</code>.
+      </div>
+    </div>
+
+    <!-- All Groups -->
+    <div id="chatAllGroupsFields" style="display:none;">
+      <div style="background:#2d2218;border:1px solid #f0883e66;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;color:#ffa657;line-height:1.6;">
+        🟠 <strong>All Groups broadcast</strong> — uses reserved <code style="color:#ff7b72;">id="UserGroups"</code> with <code>chatroom="Groups"</code>.
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Recipients</label>
+        <div id="chatAllGroupsMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+        <button type="button" onclick="addAllGroupsMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+      </div>
+    </div>
+
+    <!-- All Teams -->
+    <div id="chatAllTeamsFields" style="display:none;">
+      <div style="background:#182d1d;border:1px solid #3fb95066;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;color:#7ee787;line-height:1.6;">
+        🟢 <strong>All Teams broadcast</strong> — uses reserved <code style="color:#ff7b72;">id="TeamGroups"</code> with <code>chatroom="Teams"</code>.
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Recipients</label>
+        <div id="chatAllTeamsMemberList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+        <button type="button" onclick="addAllTeamsMember()" style="font-size:0.72rem;padding:4px 10px;">+ Add UID</button>
+      </div>
+    </div>
+
+    <!-- Server destination (all modes) -->
+    <div class="field" style="margin-bottom:12px;">
+      <label><span class="tag">__serverdestination</span> Server Destination (optional)</label>
+      <input type="text" id="chatServerDest" placeholder="10.10.10.x:4242:tcp:your-device-uid"/>
+      <div class="hint">Sender's return address on the TAK network. Leave blank for direct peer-to-peer.</div>
+    </div>
+
+    <div class="field" style="margin-top:12px;">
+      <label><span class="tag">remarks</span> Message Text <span class="required">required</span></label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="chatMessage" placeholder="Hello Warthog, begin recon pattern" style="flex:1;font-size:0.85rem;"/>
+        <button class="primary" onclick="sendChatMessage()" style="padding:8px 16px;white-space:nowrap;">▶ Send Chat</button>
+        <button onclick="copyChatMessage()" style="padding:8px 14px;white-space:nowrap;">⎘ Copy XML</button>
+      </div>
+    </div>
+
+    <div id="chatPreview" style="margin-top:10px;">
+      <div class="section-label">Generated XML Preview</div>
+      <pre id="chatPreviewXml" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:10px;font-size:0.68rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:250px;overflow-y:auto;color:#6e7681;font-style:italic;">Fill in the fields above to see the generated CoT XML...</pre>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ SPOT MAP MARKER -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">📍 Spot Map Marker Composer</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Drop a persistent map pin (type <code>b-m-p-s-m</code>). Markers have a 1-year stale time and include <code>&lt;archive/&gt;</code> so they survive device restarts.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div class="field" style="margin:0;">
+        <label><span class="tag">callsign</span> Marker Label</label>
+        <input type="text" id="spotCallsign" placeholder="W 8" value="" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label><span class="tag">uid</span> Marker UID</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="spotUid" placeholder="auto-generated" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+          <button type="button" onclick="document.getElementById('spotUid').value=genUuid();buildSpotXml();" style="white-space:nowrap;flex-shrink:0;font-size:0.7rem;padding:4px 8px;">⚄ Gen</button>
+        </div>
+        <div class="hint">Reusing the same UID updates the existing pin instead of creating a new one.</div>
+      </div>
+      <div class="field" style="margin:0;">
+        <label>Color</label>
+        <select id="spotColor" onchange="onSpotColorChange()" style="font-size:0.8rem;">
+          <option value="-1">⬜ White  (-1)</option>
+          <option value="-16776961">🔵 Blue    (-16776961)</option>
+          <option value="-16711681">🦢 Cyan    (-16711681)</option>
+          <option value="-65536">🔴 Red     (-65536)</option>
+          <option value="-16711936">🟩 Green   (-16711936)</option>
+          <option value="-256">🟨 Yellow (-256)</option>
+          <option value="-35072">🟧 Orange (-35072)</option>
+          <option value="-7650029">🟫 Brown   (-7650029)</option>
+          <option value="-65281">🩷 Magenta (-65281)</option>
+          <option value="-16777216">⬛ Black   (-16777216)</option>
+          <option value="custom">Custom ARGB…</option>
+        </select>
+        <input type="number" id="spotColorCustom" placeholder="Signed 32-bit ARGB (e.g. -1)" style="display:none;margin-top:6px;" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label>Icon Set Path</label>
+        <select id="spotIconset" onchange="onSpotIconsetChange()" style="font-size:0.8rem;">
+          <option value="spotmap">Spot Map (color dot) — auto</option>
+          <option value="label">Text Label only (LABEL)</option>
+          <option value="COT_MAPPING_2525C/b-m-p-s-m/b-m-p-s-m">2525C Marker</option>
+          <option value="custom">Custom path…</option>
+        </select>
+        <input type="text" id="spotIconsetCustom" placeholder="e.g. COT_MAPPING_SPOTMAP/b-m-p-s-m/-256" style="display:none;margin-top:6px;" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div class="field" style="margin:0;">
+        <label>Latitude <span class="required">required</span></label>
+        <input type="number" id="spotLat" placeholder="39.3526111" step="any" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label>Longitude <span class="required">required</span></label>
+        <input type="number" id="spotLon" placeholder="-76.3452495" step="any" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label>HAE (m)</label>
+        <input type="number" id="spotHae" placeholder="0.0" step="any" value="0.0" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label>CE / LE (m)</label>
+        <input type="number" id="spotCe" placeholder="10.0" step="any" value="10.0" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-bottom:8px;">Creator</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div class="field" style="margin:0;">
+        <label><span class="tag">creator callsign</span></label>
+        <input type="text" id="spotCreatorCallsign" placeholder="TRILL3" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label><span class="tag">creator uid</span></label>
+        <input type="text" id="spotCreatorUid" placeholder="ANDROID-dfac01d76beec661" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+      <div class="field" style="margin:0;">
+        <label><span class="tag">creator type</span></label>
+        <input type="text" id="spotCreatorType" placeholder="a-f-G-U-C" value="a-f-G-U-C" oninput="buildSpotXml()" onchange="buildSpotXml()"/>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="primary" onclick="sendSpotMarker()" style="padding:8px 16px;">▶ Send Marker</button>
+      <button onclick="navigator.clipboard.writeText(buildSpotXml()).then(()=>appendLog('Spot map XML copied.','ok'))" style="padding:8px 14px;">⎘ Copy XML</button>
+      <span style="font-size:0.72rem;color:#6e7681;">Stale: 1 year (persistent marker). Sending twice with the same UID updates the existing pin.</span>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="section-label">Generated XML Preview</div>
+      <pre id="spotPreviewXml" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:10px;font-size:0.68rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:250px;overflow-y:auto;color:#6e7681;font-style:italic;">Fill in the fields above to see the generated CoT XML...</pre>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ EMERGENCY ALERT -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">🚨 Emergency Alert Composer</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Sends ATAK emergency alerts (<code>b-a-o-*</code>) and cancellations. These appear as red flashing icons
+      on all connected ATAK devices and trigger audio alerts.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- LEFT: inputs -->
+      <div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div class="field" style="margin:0;">
+            <label>Alert Type</label>
+            <select id="emergencyAlertType" onchange="buildEmergencyXml()">
+              <option value="b-a-o-opn">🔴 In Contact (b-a-o-opn)</option>
+              <option value="b-a-o-tbl">🔴 Troops in Contact (b-a-o-tbl)</option>
+              <option value="b-a-o-pan">🆘 Panic / 911 (b-a-o-pan)</option>
+              <option value="b-a-o-can">✅ Cancel Emergency (b-a-o-can)</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Sender Callsign <span class="required">required</span></label>
+            <input type="text" id="emergencyCallsign" placeholder="PRAETOR 6"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+            <div class="hint">Callsign of the unit sending the emergency.</div>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Sender UID <span class="required">required</span></label>
+            <input type="text" id="emergencyUid" placeholder="ANDROID-dfac01d76beec661"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+            <div class="hint">Device UID — alert UID will be <code>{uid}-9-1-1</code>.</div>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Sender CoT Type</label>
+            <input type="text" id="emergencySenderType" value="a-f-G-U-C"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Latitude</label>
+            <input type="number" id="emergencyLat" step="any" placeholder="39.3524633"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Longitude</label>
+            <input type="number" id="emergencyLon" step="any" placeholder="-76.3448537"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>HAE (m)</label>
+            <input type="number" id="emergencyHae" step="any" value="0.0"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Stale (seconds)</label>
+            <input type="number" id="emergencyStale" value="16" min="5"
+                   oninput="buildEmergencyXml()" onchange="buildEmergencyXml()"/>
+            <div class="hint">ATAK uses ~16s for active alerts (repeats while active).</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="primary" onclick="sendEmergencyAlert()"
+                  style="padding:8px 20px;font-size:0.85rem;background:#8a1c1c;border-color:#f85149;">
+            🚨 Send Alert
+          </button>
+          <button onclick="copyEmergencyXml()" style="padding:8px 14px;">⎘ Copy XML</button>
+          <div id="emergencySendStatus" style="display:none;align-items:center;gap:6px;
+               padding:4px 10px;border-radius:4px;font-size:0.73rem;font-weight:600;
+               background:#0d1117;border:1px solid #30363d;">
+            <span id="emergencySendIcon">●</span>
+            <span id="emergencySendText"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: preview + reference -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <div class="section-label">Generated XML Preview</div>
+          <pre id="emergencyPreviewXml"
+               style="background:#0d1117;border:1px solid #30363d;border-radius:5px;
+                      padding:12px;font-size:0.68rem;line-height:1.5;white-space:pre-wrap;
+                      word-break:break-all;min-height:160px;color:#6e7681;font-style:italic;">
+Fill in callsign and UID to see generated XML...</pre>
+        </div>
+        <div>
+          <div class="section-label">Alert Type Reference</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.7rem;">
+            <thead>
+              <tr style="border-bottom:1px solid #30363d;">
+                <th style="text-align:left;padding:4px 8px;color:#6e7681;">Type</th>
+                <th style="text-align:left;padding:4px 8px;color:#6e7681;">Meaning</th>
+                <th style="text-align:left;padding:4px 8px;color:#6e7681;">ATAK display</th>
+              </tr>
+            </thead>
+            <tbody style="color:#c9d1d9;">
+              <tr style="border-bottom:1px solid #21262d;">
+                <td style="padding:4px 8px;font-family:monospace;color:#f85149;">b-a-o-opn</td>
+                <td style="padding:4px 8px;">In Contact</td>
+                <td style="padding:4px 8px;color:#6e7681;">Red flashing icon, audio alert</td>
+              </tr>
+              <tr style="border-bottom:1px solid #21262d;">
+                <td style="padding:4px 8px;font-family:monospace;color:#f85149;">b-a-o-tbl</td>
+                <td style="padding:4px 8px;">Troops in Contact</td>
+                <td style="padding:4px 8px;color:#6e7681;">Red flashing icon, audio alert</td>
+              </tr>
+              <tr style="border-bottom:1px solid #21262d;">
+                <td style="padding:4px 8px;font-family:monospace;color:#f85149;">b-a-o-pan</td>
+                <td style="padding:4px 8px;">Panic / 911</td>
+                <td style="padding:4px 8px;color:#6e7681;">Urgent red alert, loudest audio</td>
+              </tr>
+              <tr>
+                <td style="padding:4px 8px;font-family:monospace;color:#3fb950;">b-a-o-can</td>
+                <td style="padding:4px 8px;">Cancel Emergency</td>
+                <td style="padding:4px 8px;color:#6e7681;">Clears the alert on all devices</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ PRESETS -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">📋 Preset CoT Examples — Send Raw XML Directly</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      These presets bypass the form fields — timestamps are set to now at send time. Click a preset to preview it, then send it directly or copy it.
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
+      <div class="preset-card" onclick="selectPreset('friendly_ground_marker')" id="card-friendly_ground_marker">
+        <div class="preset-card-title">🟦 Friendly Ground Marker</div>
+        <div class="preset-card-type">a-f-G</div>
+        <div class="preset-card-desc">Manually placed friendly ground position marker with archive, link, and creator. Typical ATAK long-press drop-pin.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('sa_beacon')" id="card-sa_beacon">
+        <div class="preset-card-title">📍 SA Beacon (Infantry)</div>
+        <div class="preset-card-type">a-f-G-U-C</div>
+        <div class="preset-card-desc">Situational awareness beacon from a human ATAK user. The most common CoT message type on a TAK network.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('ugv_position')" id="card-ugv_position">
+        <div class="preset-card-title">🤖 UGV Position Report</div>
+        <div class="preset-card-type">a-f-G-U-C-R</div>
+        <div class="preset-card-desc">Autonomous ground robot classified as Combat Reconnaissance. Verified from ATAK stream.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('uav_position')" id="card-uav_position">
+        <div class="preset-card-title">🚁 UAV — Rotary Wing (Anafi)</div>
+        <div class="preset-card-type">a-f-G-U-C-V-U-R</div>
+        <div class="preset-card-desc">Quadcopter/rotary UAV as ground unit organic asset. Verified from ATAK.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('uav_generic')" id="card-uav_generic">
+        <div class="preset-card-title">🚁 UAV — Generic</div>
+        <div class="preset-card-type">a-f-G-U-C-V-U</div>
+        <div class="preset-card-desc">Generic UAV, wing type unspecified. Use when platform type is unknown.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('uav_fixed_wing')" id="card-uav_fixed_wing">
+        <div class="preset-card-title">✈️ UAV — Fixed Wing</div>
+        <div class="preset-card-type">a-f-G-U-C-V-U-F</div>
+        <div class="preset-card-desc">Fixed wing UAV as ground unit organic asset. Verified from ATAK.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('uav_air_rpv')" id="card-uav_air_rpv">
+        <div class="preset-card-title">🚁 UAV — Rotary RPV (Air)</div>
+        <div class="preset-card-type">a-f-A-M-H-Q</div>
+        <div class="preset-card-desc">Rotary drone under Air dimension. Use when operating around manned aviation / ATC.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('hostile_vehicle')" id="card-hostile_vehicle">
+        <div class="preset-card-title">🟥 Hostile Vehicle</div>
+        <div class="preset-card-type">a-h-G-E-V</div>
+        <div class="preset-card-desc">Hostile ground vehicle marker manually placed on map by an operator.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('chat_direct')" id="card-chat_direct">
+        <div class="preset-card-title">💬 GeoChat Direct Message</div>
+        <div class="preset-card-type">b-t-f</div>
+        <div class="preset-card-desc">TAK direct message from operator to robot. Message UUID is regenerated each send.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('unknown_ground')" id="card-unknown_ground">
+        <div class="preset-card-title">❓ Unknown Ground Contact</div>
+        <div class="preset-card-type">a-u-G</div>
+        <div class="preset-card-desc">Unknown ground contact — unidentified entity, pending classification.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('spotmap_white')" id="card-spotmap_white">
+        <div class="preset-card-title">⬜ Spot Map Marker (White)</div>
+        <div class="preset-card-type">b-m-p-s-m</div>
+        <div class="preset-card-desc">Persistent white dot dropped on the map. 1-year stale, archived.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('waypt_goto')" id="card-waypt_goto">
+        <div class="preset-card-title">🚩 Mission Waypoint (GOTO)</div>
+        <div class="preset-card-type">b-m-p-w-GOTO</div>
+        <div class="preset-card-desc">Green flag waypoint. 5-minute stale. Callsign auto-generated from creator + timestamp.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('phase_line')" id="card-phase_line">
+        <div class="preset-card-title">📏 Phase Line</div>
+        <div class="preset-card-type">u-d-f</div>
+        <div class="preset-card-desc">MIL-STD-2525C phase line (G*G*GLP). "PL" label at each endpoint.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('nai_polygon')" id="card-nai_polygon">
+        <div class="preset-card-title">🔷 NAI Polygon</div>
+        <div class="preset-card-type">u-d-f</div>
+        <div class="preset-card-desc">Named Area of Interest (G*G*SAN). Closed polygon with transparent fill.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('drawing_circle')" id="card-drawing_circle">
+        <div class="preset-card-title">🟠 Drawing Circle</div>
+        <div class="preset-card-type">u-d-c-c</div>
+        <div class="preset-card-desc">Orange circle with semi-transparent fill. Radius in &lt;shape&gt;&lt;ellipse&gt;.</div>
+      </div>
+    </div>
+
+    <div id="presetPreviewArea" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;">
+        <div>
+          <div class="section-label" id="presetPreviewLabel">Preview</div>
+          <pre id="presetPreviewXml" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;padding:12px;font-size:0.72rem;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;"></pre>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:22px;min-width:130px;">
+          <button class="primary" onclick="sendPreset()" style="padding:8px 14px;font-size:0.8rem;">▶ Send Preset</button>
+          <button onclick="copyPreset()" style="padding:8px 14px;font-size:0.8rem;">⎘ Copy XML</button>
+          <button onclick="loadPresetIntoForm()" style="padding:8px 14px;font-size:0.8rem;" title="Load preset values into the form fields above">↑ Load into Form</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px;">Timestamps (<code>time</code>, <code>start</code>, <code>stale</code>) are regenerated fresh at the moment you click Send.</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ OUTPUT -->
+  <div class="output-panel">
+    <div class="output-header">
+      <span>Generated CoT XML</span>
+      <div class="btn-group">
+        <button onclick="generateXML()">↺ Regenerate</button>
+        <button onclick="copyXML()">⎘ Copy XML</button>
+        <button class="primary" onclick="downloadXML()">↓ Download .xml</button>
+      </div>
+    </div>
+    <pre id="output">Click "Regenerate" or fill in the fields above...</pre>
+  </div>
+
+</div>
+
+<div class="toast" id="toast">✓ Copied to clipboard</div>
+
+<!--
+  SCRIPT LOAD ORDER — IMPORTANT:
+    1. cot_types.js    — genUuid, nowISO, staleISO, describeType, describeHow,
+                         timeUntil, updateTypeHelper, applyTypePreset,
+                         applyPlatformPreset, generateUID, generateCallsign, toggleSection
+    2. cot_sender.js   — sendCoT, stopRepeat, doSend, sendRawXml, buildHeaders,
+                         setStatus, appendLog, clearLog, applyProxyShortcut,
+                         updateEndpointPreview, updateAuthFields, updateRepeatUI,
+                         sendChatMessage, sendSpotMarker
+    3. cot_composer.js — generateXML, copyXML, downloadXML, buildChatXml,
+                         buildSpotXml, copyChatMessage, updateChatMode,
+                         addChatMember/addTeamMember/addRoleMember/etc,
+                         onRoleSelectChange, onSpotColorChange, onSpotIconsetChange
+    4. cot_parser.js   — parseRawCoT, parseAndLoad, parseAndSend,
+                         parseAndSendFresh, clearParseResults
+    5. cot_presets.js  — PRESETS, selectPreset, sendPreset, copyPreset,
+                         loadPresetIntoForm, renderPresetXml
+
+  All files must be in the same directory as index.html.
+-->
+<script src="cot_types.js"></script>
+<script src="cot_sender.js"></script>
+<script src="cot_composer.js"></script>
+<script src="cot_parser.js"></script>
+<script src="cot_presets.js"></script>
+
+<script>
+// =============================================================================
+// INITIALIZATION
+// Runs after all modules are loaded. Wires up event listeners and generates
+// the initial XML preview so the output panel is never blank on page load.
+// =============================================================================
+
+// Auto-regenerate SA form XML on any input change in the main form area.
+// Event delegation covers all inputs, not just the ones that exist at load time.
+document.querySelectorAll('input, select, textarea').forEach(el => {
+  el.addEventListener('change', generateXML);
+  el.addEventListener('input',  generateXML);
+});
+
+// Wire up the spot map composer input listeners separately because buildSpotXml()
+// is a different function from generateXML().
+['spotCallsign','spotUid','spotLat','spotLon','spotHae','spotCe',
+ 'spotColorCustom','spotIconsetCustom',
+ 'spotCreatorCallsign','spotCreatorUid','spotCreatorType'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input',  buildSpotXml);
+    el.addEventListener('change', buildSpotXml);
+  }
+});
+
+// Wire up chat composer live preview listeners.
+['chatSenderCallsign','chatSenderUid','chatRecipient','chatRecipientUid',
+ 'chatGroupName','chatGroupUid','chatTeamColor',
+ 'chatRoleName','chatRoleCustom','chatServerDest','chatMessage'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input',  buildChatXml);
+    el.addEventListener('change', buildChatXml);
+  }
+});
+
+// Generate initial SA form XML on page load
+generateXML();
+
+// =============================================================================
+// LIVE LISTENER — WebSocket client that connects to tak_listener.py
+// =============================================================================
+
+let listenerWs = null;           // active WebSocket instance
+let listenerMessages = [];       // all received message objects (unfiltered)
+let listenerSelectedXml = null;  // currently selected message XML string
+let listenerPaused = false;      // pause auto-analyze while user inspects
+let listenerTotal = 0;           // total received (including filtered-out)
+let listenerSelectedSeq = -1;    // stable _seq of selected msg — survives array shifts
+let _listenerMsgSeq = 0;         // monotonic counter stamped onto each message on arrival
+
+function listenerConnect() {
+  const url = document.getElementById('listenerWsUrl').value.trim();
+  if (!url) return;
+
+  listenerSetStatus('connecting', `Connecting to ${url}...`);
+
+  try {
+    listenerWs = new WebSocket(url);
+  } catch(e) {
+    listenerSetStatus('error', `Invalid WebSocket URL: ${e.message}`);
+    return;
+  }
+
+  listenerWs.onopen = () => {
+    listenerSetStatus('ok', `Connected to ${url}`);
+    document.getElementById('btnListenerConnect').style.display    = 'none';
+    document.getElementById('btnListenerDisconnect').style.display = '';
+  };
+
+  listenerWs.onclose = (e) => {
+    listenerSetStatus('off', `Disconnected (code ${e.code})`);
+    document.getElementById('btnListenerConnect').style.display    = '';
+    document.getElementById('btnListenerDisconnect').style.display = 'none';
+    listenerWs = null;
+  };
+
+  listenerWs.onerror = () => {
+    listenerSetStatus('error',
+      'WebSocket error — is tak_listener.py running? Check the URL and port.');
+  };
+
+  listenerWs.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+    listenerHandleMessage(msg);
+  };
+}
+
+function listenerDisconnect() {
+  if (listenerWs) {
+    listenerWs.close();
+    listenerWs = null;
+  }
+  listenerSetStatus('off', 'Disconnected');
+  document.getElementById('btnListenerConnect').style.display    = '';
+  document.getElementById('btnListenerDisconnect').style.display = 'none';
+}
+
+function listenerSetStatus(state, text) {
+  const dot  = document.getElementById('listenerStatusDot');
+  const span = document.getElementById('listenerStatusText');
+  const colors = { ok: '#3fb950', error: '#f85149', connecting: '#f0883e', off: '#444' };
+  dot.style.color = colors[state] || '#444';
+  span.style.color = state === 'error' ? '#f85149' : '#8b949e';
+  span.textContent = text;
+}
+
+function listenerHandleMessage(msg) {
+  // Status / control messages — show in status bar, don't add to queue
+  if (msg.type === 'status') {
+    listenerSetStatus('ok', msg.message);
+    return;
+  }
+  if (msg.type === 'error') {
+    listenerSetStatus('error', msg.message);
+    return;
+  }
+  if (msg.type === 'beacon_sent') {
+    listenerSetStatus('ok',
+      `Live on TAK map as "${msg.callsign}" (${msg.uid})`);
+    return;
+  }
+  if (msg.type !== 'cot') return;
+
+  // It's a CoT message — stamp with stable ID, store and display it
+  listenerTotal++;
+  msg._seq = ++_listenerMsgSeq;  // stable ID — survives array shifts
+  listenerMessages.push(msg);
+
+  // Keep queue bounded (last 200)
+  if (listenerMessages.length > 200) listenerMessages.shift();
+
+  document.getElementById('listenerCounter').textContent =
+    `Received: ${listenerTotal} messages`;
+
+  listenerApplyFilter();
+
+  // Auto-analyze: feed into the raw analyzer (unless paused)
+  const autoAnalyze = document.getElementById('listenerAutoAnalyze').checked;
+  if (autoAnalyze && !listenerPaused) {
+    const el = document.getElementById('rawCotInput');
+    if (el) {
+      el.value = msg.xml;
+      if (typeof parseRawCoT === 'function') parseRawCoT();
+    }
+  }
+}
+
+function listenerApplyFilter() { /* replaced by enhanced version below */ }
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function listenerSelectMessage(seq) {
+  // Look up by stable _seq — NOT array index, which shifts after .shift()
+  const msg = listenerMessages.find(m => m._seq === seq);
+  if (!msg) return;
+
+  listenerSelectedSeq = seq;
+  listenerSelectedXml = msg.xml;
+
+  // Pause auto-analyze when a message is clicked (only relevant if it's on)
+  if (document.getElementById('listenerAutoAnalyze').checked) {
+    listenerPaused = true;
+    document.getElementById('listenerPausedBadge').style.display = '';
+    document.getElementById('btnListenerResume').style.display   = '';
+  } else {
+    document.getElementById('listenerPausedBadge').style.display = 'none';
+    document.getElementById('btnListenerResume').style.display   = 'none';
+  }
+
+  // Highlight selected row — keyed by _seq
+  document.querySelectorAll('[id^="lmsg-"]').forEach(el => el.style.background = '');
+  const row = document.getElementById(`lmsg-${seq}`);
+  if (row) row.style.background = '#1a2c4d';
+
+  // Show XML in detail pane only — do NOT load into analyzer unless button clicked
+  document.getElementById('listenerSelectedDetail').style.display = '';
+  document.getElementById('listenerSelectedXml').textContent = msg.xml;
+}
+
+function listenerResume() {
+  listenerPaused = false;
+  document.getElementById('listenerPausedBadge').style.display = 'none';
+  document.getElementById('btnListenerResume').style.display   = 'none';
+}
+
+function listenerLoadSelected() {
+  if (!listenerSelectedXml) return;
+  // If auto-analyze is running, pause it so this message stays in the analyzer
+  if (document.getElementById('listenerAutoAnalyze').checked) {
+    listenerPaused = true;
+    document.getElementById('listenerPausedBadge').style.display = '';
+    document.getElementById('btnListenerResume').style.display   = '';
+  }
+  const el = document.getElementById('rawCotInput');
+  if (el) {
+    el.value = listenerSelectedXml;
+    if (typeof parseRawCoT === 'function') parseRawCoT();
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function listenerCopySelected() {
+  if (!listenerSelectedXml) return;
+  navigator.clipboard.writeText(listenerSelectedXml).then(() => {
+    showToast('XML copied to clipboard');
+  });
+}
+
+function listenerClearQueue() {
+  listenerMessages = [];
+  listenerTotal    = 0;
+  listenerSelectedXml = null;
+  listenerSelectedSeq = -1;
+  listenerPaused = false;
+  document.getElementById('listenerCounter').textContent = 'Received: 0 messages';
+  document.getElementById('listenerQueue').innerHTML =
+    '<div style="padding:16px;color:#444;text-align:center;">Queue cleared.</div>';
+  document.getElementById('listenerSelectedDetail').style.display = 'none';
+}
+
+// =============================================================================
+// LAUNCHER — communicates with tak_launcher.py HTTP API
+// =============================================================================
+
+let launcherBaseUrl  = 'http://localhost:8766';
+let launcherPollTimer = null;
+let activeLogTab     = 'listener';   // which process log is displayed
+let lastLogLine      = { listener: 0, proxy: 0 };  // for incremental fetch
+
+function launcherConnect() {
+  launcherBaseUrl = (document.getElementById('launcherUrl').value || '').trim();
+  fetch(`${launcherBaseUrl}/health`)
+    .then(r => r.json())
+    .then(() => {
+      launcherSetStatus('ok', `Connected to ${launcherBaseUrl}`);
+      // Enable start buttons
+      document.getElementById('btnStartListener').disabled = false;
+      document.getElementById('btnStartProxy').disabled    = false;
+      // Sync proxy port hint
+      syncProxyPortHint();
+      // Start polling status + logs
+      if (launcherPollTimer) clearInterval(launcherPollTimer);
+      launcherPollTimer = setInterval(launcherPoll, 3000);
+      launcherPoll();
+    })
+    .catch(() => {
+      launcherSetStatus('error',
+        'Could not reach launcher — is tak_launcher.py running?');
+    });
+}
+
+function launcherSetStatus(state, text) {
+  const dot  = document.getElementById('launcherStatusDot');
+  const span = document.getElementById('launcherStatusText');
+  const colors = { ok:'#3fb950', error:'#f85149', connecting:'#f0883e' };
+  dot.style.color  = colors[state] || '#444';
+  span.style.color = state === 'error' ? '#f85149' : '#8b949e';
+  span.textContent = text;
+}
+
+function launcherPoll() {
+  // Poll /status
+  fetch(`${launcherBaseUrl}/status`)
+    .then(r => r.json())
+    .then(data => {
+      updateProcCard('listener', data.listener);
+      updateProcCard('proxy',    data.proxy);
+    })
+    .catch(() => {
+      launcherSetStatus('error', 'Lost connection to launcher');
+      if (launcherPollTimer) clearInterval(launcherPollTimer);
+    });
+
+  // Poll logs for active tab
+  fetchLauncherLogs(activeLogTab);
+}
+
+function fetchLauncherLogs(script) {
+  fetch(`${launcherBaseUrl}/logs/${script}?n=150`)
+    .then(r => r.json())
+    .then(lines => {
+      renderLauncherLog(lines);
+    })
+    .catch(() => {});
+}
+
+function renderLauncherLog(lines) {
+  const box = document.getElementById('launcherLogBox');
+  if (!lines.length) {
+    box.innerHTML = '<span style="color:#444;">No output yet...</span>';
+    return;
+  }
+  box.innerHTML = lines.map(l => {
+    let color = '#6e7681';
+    if (l.includes('[LAUNCHER]')) color = '#58a6ff';
+    else if (l.includes('ERROR') || l.includes('error') || l.includes('FAIL')) color = '#f85149';
+    else if (l.includes('OK') || l.includes('started') || l.includes('Connected')) color = '#3fb950';
+    else if (l.includes('WARN') || l.includes('warn')) color = '#f0883e';
+    return `<div style="color:${color};">${escHtml(l)}</div>`;
+  }).join('');
+  if (document.getElementById('logAutoScroll').checked) {
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+function updateProcCard(which, data) {
+  if (!data || Object.keys(data).length === 0) return;
+  const dot    = document.getElementById(`${which === 'listener' ? 'listener' : 'proxy'}ProcDot`);
+  const status = document.getElementById(`${which === 'listener' ? 'listener' : 'proxy'}ProcStatus`);
+  const pid    = document.getElementById(`${which === 'listener' ? 'listener' : 'proxy'}ProcPid`);
+  const btnStart = document.getElementById(`btnStart${which === 'listener' ? 'Listener' : 'Proxy'}`);
+  const btnStop  = document.getElementById(`btnStop${which === 'listener' ? 'Listener' : 'Proxy'}`);
+
+  if (data.running) {
+    dot.style.color = '#3fb950';
+    status.textContent = 'running';
+    status.style.color = '#3fb950';
+    pid.textContent = `PID ${data.pid}`;
+    btnStart.style.display = 'none';
+    btnStop.style.display  = '';
+  } else {
+    dot.style.color = '#444';
+    status.textContent = data.exit_code != null
+      ? `stopped (exit ${data.exit_code})`
+      : 'stopped';
+    status.style.color = '#6e7681';
+    pid.textContent = '';
+    btnStart.style.display = '';
+    btnStop.style.display  = 'none';
+  }
+}
+
+function launcherStart(which) {
+  let config = {};
+  if (which === 'listener') {
+    config = {
+      host:            document.getElementById('lp_host').value,
+      port:            parseInt(document.getElementById('lp_port').value) || 8087,
+      callsign:        document.getElementById('lp_callsign').value,
+      ws_port:         parseInt(document.getElementById('lp_ws_port').value) || 8765,
+      lat:             parseFloat(document.getElementById('lp_lat').value) || 0.0,
+      lon:             parseFloat(document.getElementById('lp_lon').value) || 0.0,
+      beacon_interval: parseInt(document.getElementById('lp_beacon_interval').value) || 30,
+      filter_uid:      document.getElementById('lp_filter_uid').value,
+      tls:             document.getElementById('lp_tls').checked,
+      verify_cert:     document.getElementById('lp_verify_cert').checked,
+    };
+    // Auto-fill the listener WS URL field from the ws_port configured here
+    const wsPort = config.ws_port;
+    const wsEl = document.getElementById('listenerWsUrl');
+    if (wsEl) wsEl.value = `ws://localhost:${wsPort}`;
+  } else {
+    config = {
+      tak_url:       document.getElementById('pp_tak_url').value,
+      proxy_port:    parseInt(document.getElementById('pp_proxy_port').value) || 8089,
+      tak_path:      document.getElementById('pp_tak_path').value,
+      no_verify_tls: document.getElementById('pp_no_verify_tls').checked,
+      debug:         document.getElementById('pp_debug').checked,
+    };
+    syncProxyPortHint();
+  }
+
+  // Switch log tab to the script we're starting
+  switchLogTab(which === 'listener' ? 'listener' : 'proxy');
+
+  fetch(`${launcherBaseUrl}/start/${which}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) {
+        launcherSetStatus('error', d.message);
+      }
+      launcherPoll();
+    })
+    .catch(e => launcherSetStatus('error', `Start failed: ${e}`));
+}
+
+function launcherStop(which) {
+  fetch(`${launcherBaseUrl}/stop/${which}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(() => launcherPoll())
+    .catch(() => {});
+}
+
+function switchLogTab(tab) {
+  activeLogTab = tab;
+  const tabs = ['listener', 'proxy'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`logTab${t.charAt(0).toUpperCase()+t.slice(1)}`);
+    if (btn) {
+      btn.style.background = t === tab ? '#21262d' : '#0d1117';
+      btn.style.color      = t === tab ? '#58a6ff' : '#6e7681';
+    }
+  });
+  fetchLauncherLogs(tab);
+}
+
+function clearLauncherLog() {
+  document.getElementById('launcherLogBox').innerHTML =
+    '<span style="color:#444;">Log cleared.</span>';
+}
+
+function syncProxyPortHint() {
+  const port = document.getElementById('pp_proxy_port').value || '8089';
+  const hint = document.getElementById('proxyPortHint');
+  if (hint) hint.textContent = port;
+}
+
+// Update proxy port hint on input change
+document.addEventListener('DOMContentLoaded', () => {
+  const pp = document.getElementById('pp_proxy_port');
+  if (pp) pp.addEventListener('input', syncProxyPortHint);
+});
+
+// =============================================================================
+// ENHANCED LISTENER FILTER
+// =============================================================================
+
+function classifyMessage(msg) {
+  const t = (msg.cot_type || '').toLowerCase();
+  let typeKey  = 'other';
+  let affilKey = 'nonsa';
+
+  if (t.startsWith('a-')) {
+    typeKey  = 'sa';
+    const parts = t.split('-');
+    affilKey = parts[1] || 'u';
+  } else if (t.startsWith('b-a-o-')) {
+    typeKey = 'emergency';
+  } else if (t === 'b-t-f' || t.startsWith('b-t-')) {
+    typeKey = 'chat';
+  } else if (t === 'b-m-p-s-m' || t.startsWith('b-m-p-s-')) {
+    typeKey = 'spot';
+  } else if (t.startsWith('u-d-')) {
+    typeKey = 'drawing';
+  } else if (t.startsWith('t-x-d-')) {
+    typeKey = 'delete';
+  }
+
+  return { typeKey, affilKey };
+}
+
+listenerApplyFilter = function() {
+  const textSearch = (document.getElementById('listenerFilter')?.value || '').toLowerCase();
+
+  const typeToggles = {};
+  document.querySelectorAll('.filterType').forEach(cb => {
+    typeToggles[cb.dataset.key] = cb.checked;
+  });
+
+  const affilToggles = {};
+  document.querySelectorAll('.filterAffil').forEach(cb => {
+    affilToggles[cb.dataset.key] = cb.checked;
+  });
+
+  const uidBlock = (document.getElementById('listenerBlocklist')?.value || '')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  const typeBlock = (document.getElementById('listenerTypeBlocklist')?.value || '')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  const queue = document.getElementById('listenerQueue');
+
+  const visible = listenerMessages.filter(m => {
+    const uid  = (m.from_uid || '').toLowerCase();
+    const type = (m.cot_type || '').toLowerCase();
+    const cs   = (m.callsign || '').toLowerCase();
+
+    if (uidBlock.some(b => uid === b)) return false;
+    if (typeBlock.some(b => type.startsWith(b))) return false;
+
+    const { typeKey, affilKey } = classifyMessage(m);
+    if (!typeToggles[typeKey]) return false;
+    if (typeKey === 'sa' && !affilToggles[affilKey]) return false;
+    if (typeKey !== 'sa' && affilToggles['nonsa'] === false) return false;
+    if (textSearch && !uid.includes(textSearch) && !type.includes(textSearch) && !cs.includes(textSearch)) return false;
+
+    return true;
+  });
+
+  if (visible.length === 0) {
+    queue.innerHTML = `<div style="padding:16px;color:#444;text-align:center;">
+      ${listenerMessages.length > 0
+        ? 'No messages match the current filters.'
+        : 'Waiting for messages...'}</div>`;
+    return;
+  }
+
+  const affilColors = { f:'#3fb950', h:'#f85149', u:'#f0883e', n:'#79c0ff' };
+
+  queue.innerHTML = visible.map(m => {
+    const seq       = m._seq;
+    const isSelected = seq === listenerSelectedSeq;
+    const { affilKey } = classifyMessage(m);
+    const dotColor  = affilColors[affilKey] || '#8b949e';
+    const timeStr   = (m.received_at || '').replace('T',' ').replace('.000Z','');
+    const cs        = m.callsign
+      ? `<span style="color:#c9d1d9;font-weight:700;">${escHtml(m.callsign)}</span> · ` : '';
+    const rowBg     = isSelected ? '#1a2c4d' : '';
+    const border    = isSelected ? 'border-left:3px solid #58a6ff;' : 'border-left:3px solid transparent;';
+
+    return `<div id="lmsg-${seq}" onclick="listenerSelectMessage(${seq})"
+                 style="border-bottom:1px solid #21262d;cursor:pointer;${border}
+                        background:${rowBg};transition:background 0.1s;"
+                 onmouseover="if(${seq}!==listenerSelectedSeq)this.style.background='#1a2332'"
+                 onmouseout="if(${seq}!==listenerSelectedSeq)this.style.background=''">
+      <!-- Header row -->
+      <div style="padding:6px 12px;display:flex;align-items:center;gap:8px;">
+        <span style="color:${dotColor};font-size:0.9rem;flex-shrink:0;">●</span>
+        <span style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:0.72rem;">
+          ${cs}<span style="color:#79c0ff;">${escHtml(m.cot_type||'')}</span>
+          <span style="color:#6e7681;font-size:0.65rem;margin-left:6px;">${escHtml(m.from_uid||'')}</span>
+        </span>
+        <span style="color:#6e7681;font-size:0.62rem;white-space:nowrap;flex-shrink:0;">${timeStr}</span>
+      </div>
+      <!-- Full XML inline -->
+      <pre style="margin:0;padding:4px 12px 8px 28px;font-size:0.63rem;line-height:1.5;
+                  color:#6e7681;white-space:pre-wrap;word-break:break-all;
+                  border-top:1px solid #1a1f26;
+                  display:${document.getElementById('showFullXml')?.checked ? 'block' : 'none'}"
+           class="queueXmlBlock">${escHtml(m.xml||'')}</pre>
+    </div>`;
+  }).join('');
+
+  // Preserve scroll position unless auto-scroll is on
+  if (document.getElementById('listenerAutoScroll').checked && !listenerPaused) {
+    queue.scrollTop = queue.scrollHeight;
+  }
+};
+
+// =============================================================================
+// DELETE MARKER
+// Overwrites a marker with null-island coords + expired stale + no <archive/>
+// so ATAK removes it from the map. Works on archived markers that t-x-d-d
+// cannot delete.
+// =============================================================================
+
+// =============================================================================
+// DELETE MARKER
+// Two methods:
+//   forcedelete — t-x-d-d with <__forcedelete/> — confirmed working on archived markers
+//   nullisland  — overwrite with 0,0 coords + expired stale (fallback)
+// =============================================================================
+
+function getDeleteMethod() {
+  return document.querySelector('input[name="deleteMethod"]:checked')?.value || 'forcedelete';
+}
+
+function buildDeleteXml() {
+  const uid      = (document.getElementById('deleteUid')?.value      || '').trim();
+  const type     = (document.getElementById('deleteType')?.value     || 'a-f-G').trim();
+  const callsign = (document.getElementById('deleteCallsign')?.value || 'DELETE ME').trim();
+  const lat      = parseFloat(document.getElementById('deleteOrigLat')?.value) || 0.0;
+  const lon      = parseFloat(document.getElementById('deleteOrigLon')?.value) || 0.0;
+  const method   = getDeleteMethod();
+
+  const pre = document.getElementById('deletePreviewXml');
+
+  if (!uid) {
+    pre.textContent  = 'Fill in UID to see generated XML...';
+    pre.style.fontStyle = 'italic';
+    pre.style.color     = '#6e7681';
+    return null;
+  }
+
+  // Use nowISO / staleISO if available (from cot_types.js), else fallback
+  const now   = typeof nowISO  === 'function' ? nowISO()        : new Date().toISOString().replace(/\.\d+/,'Z');
+  const stale = typeof staleISO === 'function' ? staleISO(1)    : new Date(Date.now() + 60000).toISOString().replace(/\.\d+/,'Z');
+
+  let xml;
+
+  if (method === 'forcedelete') {
+    xml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="delete-cmd-${uid.slice(0,8)}"
+       type="t-x-d-d"
+       how="m-g"
+       time="${now}" start="${now}" stale="${stale}">
+  <point lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}" hae="0.0" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <link uid="${uid}" relation="none" type="none"/>
+    <__forcedelete/>
+  </detail>
+</event>`;
+  } else {
+    // Null island overwrite — expired stale, no <archive/>, coords moved to 0,0
+    xml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="${uid}"
+       type="${type}"
+       how="h-g-i-g-o"
+       time="2000-01-01T00:00:00Z" start="2000-01-01T00:00:00Z" stale="2000-01-01T00:00:01Z"
+       access="Undefined">
+  <point lat="0.0000000" lon="0.0000000" hae="0.0" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <contact callsign="${callsign}"/>
+  </detail>
+</event>`;
+  }
+
+  pre.textContent     = xml;
+  pre.style.fontStyle = 'normal';
+  pre.style.color     = '#c9d1d9';
+  return xml;
+}
+
+function deleteAutoFill() {
+  const raw = (document.getElementById('deletePasteInput')?.value || '').trim();
+  if (!raw) return;
+
+  try {
+    const parser = new DOMParser();
+    const doc    = parser.parseFromString(raw, 'text/xml');
+    const event  = doc.querySelector('event');
+    if (!event) { alert('Could not parse CoT XML — check the input.'); return; }
+
+    document.getElementById('deleteUid').value     = event.getAttribute('uid')  || '';
+    document.getElementById('deleteType').value    = event.getAttribute('type') || '';
+    document.getElementById('deleteOrigLat').value = doc.querySelector('point')?.getAttribute('lat') || '';
+    document.getElementById('deleteOrigLon').value = doc.querySelector('point')?.getAttribute('lon') || '';
+
+    buildDeleteXml();
+  } catch(e) {
+    alert(`Parse error: ${e.message}`);
+  }
+}
+
+function deleteSetStatus(state, message) {
+  const wrap = document.getElementById('deleteSendStatus');
+  const icon = document.getElementById('deleteSendIcon');
+  const text = document.getElementById('deleteSendText');
+  if (!wrap) return;
+  const styles = {
+    sending: { color: '#f0883e', bg: '#2d2218', border: '#f0883e66', icon: '⏳' },
+    ok:      { color: '#3fb950', bg: '#182d1d', border: '#3fb95066', icon: '✓'  },
+    error:   { color: '#f85149', bg: '#2d1b1b', border: '#f8514966', icon: '✗'  },
+  };
+  const s = styles[state] || styles.error;
+  wrap.style.display    = 'flex';
+  wrap.style.background  = s.bg;
+  wrap.style.borderColor = s.border;
+  icon.style.color = s.color;
+  icon.textContent = s.icon;
+  text.style.color = s.color;
+  text.textContent = message;
+  if (state === 'ok') setTimeout(() => { wrap.style.display = 'none'; }, 4000);
+}
+
+async function sendDeleteMarker() {
+  const xml = buildDeleteXml();
+  if (!xml) { deleteSetStatus('error', 'UID is required'); return; }
+
+  const count = parseInt(document.getElementById('deleteRepeatCount')?.value) || 1;
+  let sent = 0;
+  let failed = 0;
+
+  for (let i = 0; i < count; i++) {
+    deleteSetStatus('sending', count > 1 ? `Sending… (${i+1}/${count})` : 'Sending…');
+    const ok = await sendRawXml(xml, 'Delete Marker');
+    if (ok) sent++; else failed++;
+    // Small delay between sends so the TAK server doesn't rate-limit them
+    if (i < count - 1) await new Promise(r => setTimeout(r, 300));
+  }
+
+  if (failed === 0) {
+    deleteSetStatus('ok', count > 1 ? `Sent ${sent}× — marker should be gone` : 'Marker overwritten — should disappear from ATAK');
+  } else if (sent > 0) {
+    deleteSetStatus('error', `${sent} succeeded, ${failed} failed — check TAK Server log`);
+  } else {
+    deleteSetStatus('error', 'All sends failed — check TAK Server panel log');
+  }
+}
+
+function copyDeleteXml() {
+  const xml = buildDeleteXml();
+  if (!xml) return;
+  navigator.clipboard.writeText(xml).then(() => showToast('Delete XML copied'));
+}
+
+// =============================================================================
+// EMERGENCY ALERT COMPOSER
+// Builds b-a-o-opn / b-a-o-tbl / b-a-o-pan / b-a-o-can CoT messages.
+// Emergency UID convention: {device_uid}-9-1-1
+// Cancel uses same UID with <emergency cancel="true"> and no type attribute.
+// =============================================================================
+
+function buildEmergencyXml() {
+  const alertType  = document.getElementById('emergencyAlertType')?.value  || 'b-a-o-opn';
+  const callsign   = (document.getElementById('emergencyCallsign')?.value  || '').trim();
+  const uid        = (document.getElementById('emergencyUid')?.value       || '').trim();
+  const senderType = (document.getElementById('emergencySenderType')?.value|| 'a-f-G-U-C').trim();
+  const lat        = parseFloat(document.getElementById('emergencyLat')?.value) || 0.0;
+  const lon        = parseFloat(document.getElementById('emergencyLon')?.value) || 0.0;
+  const hae        = parseFloat(document.getElementById('emergencyHae')?.value) || 0.0;
+  const staleSecs  = parseInt(document.getElementById('emergencyStale')?.value) || 16;
+
+  const pre = document.getElementById('emergencyPreviewXml');
+
+  if (!callsign || !uid) {
+    pre.textContent  = 'Fill in callsign and UID to see generated XML...';
+    pre.style.fontStyle = 'italic';
+    pre.style.color     = '#6e7681';
+    return null;
+  }
+
+  const alertUid = `${uid}-9-1-1`;
+  const isCancel = alertType === 'b-a-o-can';
+
+  const now   = typeof nowISO   === 'function' ? nowISO()           : new Date().toISOString().replace(/\.\d+/,'Z');
+  const stale = typeof staleISO === 'function' ? staleISO(staleSecs / 60) :
+    new Date(Date.now() + staleSecs * 1000).toISOString().replace(/\.\d+/,'Z');
+
+  const emergencyTag = isCancel
+    ? `<emergency cancel="true">${callsign}</emergency>`
+    : `<emergency type="${alertTypeLabel(alertType)}">${callsign}</emergency>`;
+
+  const detailInner = isCancel
+    ? `\n    ${emergencyTag}`
+    : `\n    <contact callsign="${callsign}-Alert"/>
+    <link uid="${uid}" type="${senderType}" relation="p-p"/>
+    ${emergencyTag}`;
+
+  const xml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="${alertUid}"
+       type="${alertType}"
+       how="h-e"
+       time="${now}" start="${now}" stale="${stale}"
+       access="Undefined">
+  <point lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}" hae="${hae.toFixed(3)}" ce="9999999.0" le="9999999.0"/>
+  <detail>${detailInner}
+  </detail>
+</event>`;
+
+  pre.textContent     = xml;
+  pre.style.fontStyle = 'normal';
+  pre.style.color     = '#c9d1d9';
+  return xml;
+}
+
+function alertTypeLabel(type) {
+  return {
+    'b-a-o-opn': 'In Contact',
+    'b-a-o-tbl': 'Troops in Contact',
+    'b-a-o-pan': 'Panic',
+  }[type] || 'In Contact';
+}
+
+function emergencySetStatus(state, message) {
+  const wrap = document.getElementById('emergencySendStatus');
+  const icon = document.getElementById('emergencySendIcon');
+  const text = document.getElementById('emergencySendText');
+  if (!wrap) return;
+  const styles = {
+    sending: { color: '#f0883e', bg: '#2d2218', border: '#f0883e66', icon: '⏳' },
+    ok:      { color: '#3fb950', bg: '#182d1d', border: '#3fb95066', icon: '✓'  },
+    error:   { color: '#f85149', bg: '#2d1b1b', border: '#f8514966', icon: '✗'  },
+  };
+  const s = styles[state] || styles.error;
+  wrap.style.display     = 'flex';
+  wrap.style.background  = s.bg;
+  wrap.style.borderColor = s.border;
+  icon.style.color = s.color;
+  icon.textContent = s.icon;
+  text.style.color = s.color;
+  text.textContent = message;
+  if (state === 'ok') setTimeout(() => { wrap.style.display = 'none'; }, 4000);
+}
+
+async function sendEmergencyAlert() {
+  const xml = buildEmergencyXml();
+  if (!xml) { emergencySetStatus('error', 'Callsign and UID are required'); return; }
+  emergencySetStatus('sending', 'Sending…');
+  const ok = await sendRawXml(xml, 'Emergency Alert');
+  if (ok) {
+    const isCancel = document.getElementById('emergencyAlertType')?.value === 'b-a-o-can';
+    emergencySetStatus('ok', isCancel ? 'Emergency cancelled' : 'Alert sent to all ATAK devices');
+  } else {
+    emergencySetStatus('error', 'Send failed — check TAK Server panel log');
+  }
+}
+
+function copyEmergencyXml() {
+  const xml = buildEmergencyXml();
+  if (!xml) return;
+  navigator.clipboard.writeText(xml).then(() => showToast('Emergency XML copied'));
+}
+
+// =============================================================================
+// PAGE CLEANUP — runs on tab close / refresh / navigation
+// Without this, the WebSocket and polling intervals keep running in the
+// background, consuming CPU and preventing garbage collection.
+// =============================================================================
+
+window.addEventListener('beforeunload', () => {
+  // Stop repeat-send interval (defined in cot_sender.js)
+  if (typeof stopRepeat === 'function') stopRepeat();
+
+  // Close WebSocket to tak_listener.py
+  if (listenerWs) {
+    listenerWs.onclose = null; // suppress the onclose handler firing during teardown
+    listenerWs.close();
+    listenerWs = null;
+  }
+
+  // Stop launcher polling
+  if (launcherPollTimer) {
+    clearInterval(launcherPollTimer);
+    launcherPollTimer = null;
+  }
+
+  // Ask launcher to stop child processes.
+  // Use sendBeacon — the only fetch-like API that's guaranteed to fire during
+  // beforeunload even as the page is being torn down. Fire-and-forget is fine here.
+  if (launcherBaseUrl) {
+    navigator.sendBeacon(`${launcherBaseUrl}/stop/all`);
+  }
+});
+
+// =============================================================================
+// DEBOUNCED QUEUE RE-RENDER
+// listenerApplyFilter() rebuilds the entire queue innerHTML. On a busy TAK
+// network with many messages per second this causes constant DOM thrashing.
+// The debounce batches rapid calls into one render every 250ms maximum.
+// =============================================================================
+
+let _filterDebounceTimer = null;
+const _rawApplyFilter = listenerApplyFilter;
+
+listenerApplyFilter = function() {
+  if (_filterDebounceTimer) clearTimeout(_filterDebounceTimer);
+  _filterDebounceTimer = setTimeout(() => {
+    _filterDebounceTimer = null;
+    _rawApplyFilter();
+  }, 250);
+};
+
+</script>
+
+</body>
+</html>
