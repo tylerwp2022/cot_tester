@@ -13,6 +13,7 @@ cot_parser.js       — Raw XML parser, analyzer, timestamp injection
 cot_composer.js     — Form-based XML builder, chat/spot/preset composers
 cot_sender.js       — HTTP send logic, repeat mode, status/log
 cot_presets.js      — Preset CoT library definitions
+cot_diff.js         — Two-message diff engine (attribute, point, detail comparison)
 
 tak_listener.py     — WebSocket bridge: TAK TCP → browser
 tak_launcher.py     — HTTP process manager (starts/stops listener & proxy)
@@ -99,6 +100,32 @@ Paste any CoT XML to parse and inspect it.
 - **▶ Send with Fresh Timestamps** — injects current time/start, recalculates stale
 - **↓ Load into Form** — populates the Event Envelope form fields
 - Inline send status feedback (⏳ / ✓ / ✗) next to the buttons
+
+---
+
+### 🔀 CoT Message Diff — Compare Two Messages
+Paste two CoT messages side-by-side to see exactly what changed between them. Useful for comparing the same entity's SA beacons over time, verifying your injected markers against real ATAK traffic, or understanding why one message deleted successfully and another didn't.
+
+**Usage:**
+1. Paste Message A and Message B into the input fields
+2. Click **🔀 Compare**
+3. Results are broken into three sections — each field is shown on one row with both values side-by-side
+
+**Diff is split into three sections:**
+- **Event Attributes** — `uid`, `type`, `how`, `time`, `start`, `stale`, `version`, `access`
+- **Point (coordinates)** — `lat`, `lon`, `hae`, `ce`, `le`
+- **Detail Block** — every child element flattened to `tag.attribute = value` (e.g. `contact.callsign`, `__group.name`, `takv.platform`, `emergency.type`)
+
+**Color coding:**
+
+| Color | Meaning |
+|-------|---------|
+| 🟠 CHANGED | Field exists in both but values differ |
+| 🔴 REMOVED | Field only in Message A |
+| 🟢 ADDED | Field only in Message B |
+| dimmed | Identical in both — shown for context |
+
+**← From Analyzer** button on each input pulls whatever is currently loaded in the Raw CoT Analyzer, so you can compare a received message against one you're building without re-pasting.
 
 ---
 
@@ -191,7 +218,8 @@ Browser (index.html)
 ├── cot_parser.js     — XML parsing, analyzer, timestamp logic
 ├── cot_composer.js   — form builder, XML generation
 ├── cot_sender.js     — fetch() POST to proxy, repeat mode
-└── cot_presets.js    — preset definitions
+├── cot_presets.js    — preset definitions
+└── cot_diff.js       — two-message diff engine
 
 tak_launcher.py  ←→  HTTP API (localhost:8766)
 ├── /start/listener   start tak_listener.py subprocess

@@ -749,6 +749,111 @@
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════════════════════ CoT DIFF -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">🔀 CoT Message Diff — Compare Two Messages</div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-bottom:14px;">
+      Paste two CoT messages to compare them side-by-side. Differences are highlighted inline —
+      <span style="background:#2d3b1e;color:#85e89d;padding:1px 5px;border-radius:3px;font-size:0.68rem;">green = only in B</span>
+      <span style="background:#3b1e1e;color:#f97583;padding:1px 5px;border-radius:3px;font-size:0.68rem;margin-left:4px;">red = only in A</span>
+      <span style="background:#2d2218;color:#f0883e;padding:1px 5px;border-radius:3px;font-size:0.68rem;margin-left:4px;">orange = changed value</span>
+    </div>
+
+    <!-- Input row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
+      <div>
+        <div class="section-label">Message A
+          <button onclick="diffLoadFromAnalyzer('A')"
+                  style="float:right;font-size:0.65rem;padding:2px 8px;margin:0;
+                         font-weight:400;text-transform:none;letter-spacing:0;">
+            ← From Analyzer
+          </button>
+        </div>
+        <textarea id="diffInputA" rows="7"
+          style="width:100%;font-family:'Courier New',monospace;font-size:0.7rem;
+                 line-height:1.5;resize:vertical;box-sizing:border-box;"
+          placeholder="Paste first CoT XML here…"
+          oninput="diffClearResults()"></textarea>
+      </div>
+      <div>
+        <div class="section-label">Message B
+          <button onclick="diffLoadFromAnalyzer('B')"
+                  style="float:right;font-size:0.65rem;padding:2px 8px;margin:0;
+                         font-weight:400;text-transform:none;letter-spacing:0;">
+            ← From Analyzer
+          </button>
+        </div>
+        <textarea id="diffInputB" rows="7"
+          style="width:100%;font-family:'Courier New',monospace;font-size:0.7rem;
+                 line-height:1.5;resize:vertical;box-sizing:border-box;"
+          placeholder="Paste second CoT XML here…"
+          oninput="diffClearResults()"></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+      <button class="primary" onclick="runDiff()" style="padding:8px 20px;">🔀 Compare</button>
+      <button onclick="diffClear()" style="padding:8px 14px;color:#6e7681;">✕ Clear</button>
+      <span id="diffSummaryBadge" style="display:none;font-size:0.72rem;color:#8b949e;"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="diffResults" style="display:none;">
+
+      <!-- Attribute diff table -->
+      <div id="diffAttrSection" style="display:none;margin-bottom:16px;">
+        <div class="section-label">Event Attributes</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+          <thead>
+            <tr style="border-bottom:1px solid #30363d;">
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:18%;">Attribute</th>
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:41%;">Message A</th>
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:41%;">Message B</th>
+            </tr>
+          </thead>
+          <tbody id="diffAttrBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Point diff table -->
+      <div id="diffPointSection" style="display:none;margin-bottom:16px;">
+        <div class="section-label">Point (coordinates)</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+          <thead>
+            <tr style="border-bottom:1px solid #30363d;">
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:18%;">Attribute</th>
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:41%;">Message A</th>
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:41%;">Message B</th>
+            </tr>
+          </thead>
+          <tbody id="diffPointBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Detail diff table -->
+      <div id="diffDetailSection" style="display:none;margin-bottom:16px;">
+        <div class="section-label">Detail Block</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+          <thead>
+            <tr style="border-bottom:1px solid #30363d;">
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:18%;">Field</th>
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:41%;">Message A</th>
+              <th style="text-align:left;padding:5px 10px;color:#6e7681;font-weight:600;width:41%;">Message B</th>
+            </tr>
+          </thead>
+          <tbody id="diffDetailBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Identical notice -->
+      <div id="diffIdenticalNotice" style="display:none;padding:14px;background:#182d1d;
+           border:1px solid #3fb95066;border-radius:5px;color:#3fb950;font-size:0.8rem;">
+        ✓ No differences found — the two messages are functionally identical.
+      </div>
+
+    </div>
+  </div>
+
   <!-- ══════════════════════════════════════════════════════ DELETE MARKER -->
   <div class="panel" style="grid-column: 1 / -1;">
     <div class="panel-title">🗑️ Delete Marker</div>
@@ -2671,6 +2776,215 @@ function copyEmergencyXml() {
   const xml = buildEmergencyXml();
   if (!xml) return;
   navigator.clipboard.writeText(xml).then(() => showToast('Emergency XML copied'));
+}
+
+// =============================================================================
+// CoT MESSAGE DIFF
+// Parses two CoT XML strings and produces a structured, highlighted comparison
+// across three sections: event attributes, <point> attributes, and <detail>
+// child elements.
+//
+// Diff categories:
+//   changed  — field exists in both but values differ (orange)
+//   removed  — field only in A (red)
+//   added    — field only in B (green)
+//   same     — identical (shown dimmed, not highlighted)
+// =============================================================================
+
+/** Pull all attributes of a DOM element into a plain {name: value} object. */
+function diffAttrsToMap(el) {
+  if (!el) return {};
+  const out = {};
+  for (const attr of el.attributes) out[attr.name] = attr.value;
+  return out;
+}
+
+/**
+ * Flatten <detail> children into a map of descriptive keys → value strings.
+ * Keys are "tagName.attrName" or "tagName" for presence-only tags.
+ * Flow tags and archive duplicates are normalised.
+ */
+function diffFlattenDetail(detailEl) {
+  const out = {};
+  if (!detailEl) return out;
+
+  for (const child of detailEl.children) {
+    const tag = child.tagName;
+
+    // Presence-only tags (no attributes, no text content worth diffing)
+    if (child.attributes.length === 0 && child.textContent.trim() === '') {
+      out[tag] = '(present)';
+      continue;
+    }
+
+    // Tags with text content (e.g. <remarks>, <emergency>)
+    if (child.attributes.length === 0) {
+      out[tag] = child.textContent.trim() || '(present)';
+      continue;
+    }
+
+    // Tags with attributes — emit one entry per attribute
+    for (const attr of child.attributes) {
+      const key = `${tag}.${attr.name}`;
+      out[key] = attr.value;
+    }
+
+    // Also capture text content if present alongside attributes
+    const text = child.textContent.trim();
+    if (text) out[`${tag}.(text)`] = text;
+  }
+
+  return out;
+}
+
+/** Compute the diff between two {key: value} maps. */
+function diffMaps(mapA, mapB) {
+  const allKeys = new Set([...Object.keys(mapA), ...Object.keys(mapB)]);
+  const rows = [];
+
+  for (const key of [...allKeys].sort()) {
+    const a = mapA[key];
+    const b = mapB[key];
+    if (a === undefined)       rows.push({ key, a: null,  b,    state: 'added'   });
+    else if (b === undefined)  rows.push({ key, a,        b: null, state: 'removed' });
+    else if (a !== b)          rows.push({ key, a,        b,    state: 'changed'  });
+    else                       rows.push({ key, a,        b,    state: 'same'     });
+  }
+  return rows;
+}
+
+/** Render a diff row array into a tbody element. Returns count of non-same rows. */
+function diffRenderRows(rows, tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return 0;
+
+  const rowStyles = {
+    added:   { bg: '#0d2318',  aColor: '#6e7681', bColor: '#85e89d' },
+    removed: { bg: '#2d1b1b',  aColor: '#f97583', bColor: '#6e7681' },
+    changed: { bg: '#2d2218',  aColor: '#f97583', bColor: '#85e89d' },
+    same:    { bg: 'transparent', aColor: '#6e7681', bColor: '#6e7681' },
+  };
+
+  tbody.innerHTML = rows.map(r => {
+    const s      = rowStyles[r.state] || rowStyles.same;
+    const keyCol = r.state !== 'same'
+      ? `<strong style="color:#c9d1d9;">${escHtml(r.key)}</strong>`
+      : `<span style="color:#6e7681;">${escHtml(r.key)}</span>`;
+    const aVal   = r.a !== null ? escHtml(r.a) : '<span style="color:#444;">—</span>';
+    const bVal   = r.b !== null ? escHtml(r.b) : '<span style="color:#444;">—</span>';
+    const badge  = r.state !== 'same'
+      ? `<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;margin-left:6px;
+                      font-weight:700;background:${s.bg === 'transparent' ? '#21262d' : s.bg};
+                      color:${s.state === 'added' ? '#85e89d' : s.state === 'removed' ? '#f97583' : '#f0883e'};">
+           ${r.state.toUpperCase()}</span>` : '';
+    return `<tr style="border-bottom:1px solid #21262d;background:${s.bg};">
+      <td style="padding:5px 10px;font-family:monospace;font-size:0.68rem;vertical-align:top;">
+        ${keyCol}${badge}
+      </td>
+      <td style="padding:5px 10px;font-family:monospace;font-size:0.68rem;
+                 color:${s.aColor};vertical-align:top;word-break:break-all;">${aVal}</td>
+      <td style="padding:5px 10px;font-family:monospace;font-size:0.68rem;
+                 color:${s.bColor};vertical-align:top;word-break:break-all;">${bVal}</td>
+    </tr>`;
+  }).join('');
+
+  return rows.filter(r => r.state !== 'same').length;
+}
+
+function runDiff() {
+  const rawA = (document.getElementById('diffInputA')?.value || '').trim();
+  const rawB = (document.getElementById('diffInputB')?.value || '').trim();
+
+  if (!rawA || !rawB) {
+    alert('Paste a CoT message into both fields before comparing.');
+    return;
+  }
+
+  const parser = new DOMParser();
+  let docA, docB;
+  try {
+    docA = parser.parseFromString(rawA, 'text/xml');
+    docB = parser.parseFromString(rawB, 'text/xml');
+  } catch(e) {
+    alert(`XML parse error: ${e.message}`);
+    return;
+  }
+
+  // Check for XML parse errors
+  const errA = docA.querySelector('parsererror');
+  const errB = docB.querySelector('parsererror');
+  if (errA) { alert('Message A is not valid XML:\n' + errA.textContent); return; }
+  if (errB) { alert('Message B is not valid XML:\n' + errB.textContent); return; }
+
+  const evtA = docA.querySelector('event');
+  const evtB = docB.querySelector('event');
+  if (!evtA) { alert('Message A does not contain a <event> element.'); return; }
+  if (!evtB) { alert('Message B does not contain a <event> element.'); return; }
+
+  let totalDiffs = 0;
+
+  // ── 1. Event attributes ───────────────────────────────────────────────────
+  const attrRows  = diffMaps(diffAttrsToMap(evtA), diffAttrsToMap(evtB));
+  const attrDiffs = diffRenderRows(attrRows, 'diffAttrBody');
+  totalDiffs += attrDiffs;
+  const attrSection = document.getElementById('diffAttrSection');
+  attrSection.style.display = '';
+  // Bold the section label if it has diffs
+  attrSection.querySelector('.section-label').style.color = attrDiffs > 0 ? '#c9d1d9' : '#6e7681';
+
+  // ── 2. Point attributes ───────────────────────────────────────────────────
+  const ptA       = evtA.querySelector('point');
+  const ptB       = evtB.querySelector('point');
+  const pointRows = diffMaps(diffAttrsToMap(ptA), diffAttrsToMap(ptB));
+  const ptDiffs   = diffRenderRows(pointRows, 'diffPointBody');
+  totalDiffs += ptDiffs;
+  const ptSection = document.getElementById('diffPointSection');
+  ptSection.style.display = '';
+  ptSection.querySelector('.section-label').style.color = ptDiffs > 0 ? '#c9d1d9' : '#6e7681';
+
+  // ── 3. Detail children ────────────────────────────────────────────────────
+  const dtA        = evtA.querySelector('detail');
+  const dtB        = evtB.querySelector('detail');
+  const detailRows = diffMaps(diffFlattenDetail(dtA), diffFlattenDetail(dtB));
+  const dtDiffs    = diffRenderRows(detailRows, 'diffDetailBody');
+  totalDiffs += dtDiffs;
+  const dtSection  = document.getElementById('diffDetailSection');
+  dtSection.style.display = '';
+  dtSection.querySelector('.section-label').style.color = dtDiffs > 0 ? '#c9d1d9' : '#6e7681';
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  const badge = document.getElementById('diffSummaryBadge');
+  const identical = document.getElementById('diffIdenticalNotice');
+  if (totalDiffs === 0) {
+    badge.style.display = 'none';
+    identical.style.display = '';
+  } else {
+    badge.style.display = '';
+    badge.textContent = `${totalDiffs} difference${totalDiffs !== 1 ? 's' : ''} found`;
+    badge.style.color = '#f0883e';
+    identical.style.display = 'none';
+  }
+
+  document.getElementById('diffResults').style.display = '';
+}
+
+function diffClearResults() {
+  document.getElementById('diffResults').style.display = 'none';
+  document.getElementById('diffSummaryBadge').style.display = 'none';
+}
+
+function diffClear() {
+  document.getElementById('diffInputA').value = '';
+  document.getElementById('diffInputB').value = '';
+  diffClearResults();
+}
+
+/** Load whatever XML is currently in the Raw CoT Analyzer into diff field A or B. */
+function diffLoadFromAnalyzer(slot) {
+  const xml = document.getElementById('rawCotInput')?.value?.trim();
+  if (!xml) { showToast('Raw CoT Analyzer is empty — paste something there first'); return; }
+  document.getElementById(`diffInput${slot}`).value = xml;
+  diffClearResults();
 }
 
 // =============================================================================
