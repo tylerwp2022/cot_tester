@@ -36,6 +36,10 @@ USAGE EXAMPLES:
     # TLS connection (TAK Server default secure port)
     python3 tak_listener.py --host 10.10.10.3 --port 8089 --tls --callsign CoT-Bridge
 
+    # TLS with mutual TLS client certificate (.p12 from TAK Server admin console)
+    python3 tak_listener.py --host 10.10.10.3 --port 8089 --tls \\
+                             --cert-file /path/to/user.p12 --cert-password mypassword
+
     # Custom WebSocket port (if 8765 is taken)
     python3 tak_listener.py --host 10.10.10.3 --port 8087 --ws-port 9000
 
@@ -69,9 +73,11 @@ OUTPUT:
 import argparse
 import asyncio
 import json
+import os
 import socket
 import ssl
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -104,6 +110,13 @@ except ImportError:
 websocket_clients: Set = set()          # connected browser WebSocket clients
 ws_event_loop: Optional[asyncio.AbstractEventLoop] = None  # set at startup
 args_global = None                      # parsed CLI args, set at startup
+
+# Stores the most recent beacon_sent payload so late-connecting browser clients
+# receive the identity immediately on WebSocket connect rather than waiting for
+# the next beacon interval (which could be up to 30 seconds away).
+# Only mutated from the TCP reader thread; only read from the asyncio ws_handler.
+# Reads of a dict reference are atomic in CPython so no lock is needed.
+_bridge_identity: Optional[dict] = None
 
 
 # =============================================================================
@@ -177,6 +190,14 @@ async def ws_handler(websocket):
     Handle a new WebSocket connection from the browser.
     Registers the client, sends a welcome status message, and waits until
     the connection closes (the actual CoT forwarding happens via broadcast()).
+
+    WHY WE RESEND _bridge_identity HERE:
+    beacon_sent is broadcast once when tak_listener.py first connects to the
+    TAK server TCP socket. If the browser WebSocket connects after that moment
+    (the common case — user starts the listener, then opens the browser tab),
+    it misses the beacon_sent message and the "Use Bridge Identity" button
+    appears to do nothing. Replaying the stored identity to each new client
+    on connect fixes this regardless of connection order.
     """
     global websocket_clients
     websocket_clients.add(websocket)
@@ -188,6 +209,12 @@ async def ws_handler(websocket):
         "type": "status",
         "message": f"WebSocket connected. Listening for CoT from TAK server..."
     }))
+
+    # If the TAK TCP connection is already up and has sent a beacon, replay
+    # the identity immediately so the browser doesn't have to wait up to
+    # beacon_interval seconds for the next one.
+    if _bridge_identity is not None:
+        await websocket.send(json.dumps(_bridge_identity))
 
     try:
         # Keep connection open — we drive messages from the TAK TCP thread,
@@ -292,6 +319,164 @@ def parse_cot_envelope(xml_str: str) -> dict:
 
 
 # =============================================================================
+# TLS / SSL CONTEXT BUILDER
+#
+# TAK Server port 8089 uses mutual TLS (mTLS) — the server authenticates
+# itself to us AND we authenticate ourselves to the server via a client cert.
+#
+# TAK Server issues client certs as .p12 (PKCS#12) bundles from the admin
+# console (User Certs → Export). Python's ssl module only speaks PEM, so we
+# do an in-memory .p12→PEM conversion via the `cryptography` library, write
+# briefly to named temp files (required by ssl.SSLContext.load_cert_chain),
+# and delete them immediately after loading.
+#
+# Two operating modes:
+#   No cert:   plain TLS encryption, no client identity presented.
+#              Works if the TAK Server is configured for anonymous clients.
+#   With cert: full mTLS — TAK Server sees us as a named user, required on
+#              most production TAK deployments.
+#
+# Server-side verification:
+#   verify=False (default): skip verifying the TAK server's cert chain.
+#              Almost always correct for self-signed TAK server certs.
+#   verify=True:            enforce chain validation. Requires your CA cert
+#              to be in the system trust store or passed via ca_cert_file.
+#              Switchable via --verify-cert CLI flag.
+# =============================================================================
+
+def _load_p12_into_context(ctx: ssl.SSLContext, p12_path: str, password: str) -> None:
+    """
+    Load a PKCS#12 (.p12) client certificate into an existing SSLContext.
+
+    Python ssl only accepts PEM files. This function:
+      1. Reads the .p12 bytes from disk
+      2. Decrypts them with the password using the `cryptography` library
+      3. Serializes the private key and certificate to PEM in memory
+      4. Writes each to a NamedTemporaryFile (required by load_cert_chain)
+      5. Calls ctx.load_cert_chain() to register the identity
+      6. Immediately unlinks the temp files — minimises disk exposure time
+
+    Args:
+        ctx:       ssl.SSLContext to load the identity into (mutated in place)
+        p12_path:  Filesystem path to the .p12 file
+        password:  Plaintext password string (or "" for no password)
+
+    Raises:
+        RuntimeError: if `cryptography` is not installed, if the password is
+                      wrong, or if the .p12 is malformed.
+
+    WHY NOT in-memory only? ssl.SSLContext.load_cert_chain() only accepts
+    file paths (as of Python 3.12). The temp-file approach is the standard
+    workaround; files are deleted synchronously before this function returns.
+    """
+    try:
+        from cryptography.hazmat.primitives.serialization import pkcs12
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding, PrivateFormat, NoEncryption
+        )
+    except ImportError:
+        raise RuntimeError(
+            "The 'cryptography' package is required for .p12 certificate support.\n"
+            "Install it with:  pip install cryptography"
+        )
+
+    try:
+        with open(p12_path, "rb") as f:
+            p12_data = f.read()
+
+        pw_bytes = password.encode("utf-8") if password else None
+        private_key, certificate, _chain = pkcs12.load_key_and_certificates(
+            p12_data, pw_bytes
+        )
+
+        if private_key is None or certificate is None:
+            raise RuntimeError(
+                f"No private key or certificate found in {p12_path}. "
+                "Is this a valid PKCS#12 file?"
+            )
+
+        # Serialize to PEM — write to temp files, load, then delete immediately
+        cert_pem = certificate.public_bytes(Encoding.PEM)
+        key_pem  = private_key.private_bytes(
+            Encoding.PEM,
+            PrivateFormat.TraditionalOpenSSL,
+            NoEncryption()               # no passphrase on temp file — it's short-lived
+        )
+
+        cert_tmp = key_tmp = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as cf:
+                cf.write(cert_pem)
+                cert_tmp = cf.name
+            with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as kf:
+                kf.write(key_pem)
+                key_tmp = kf.name
+
+            ctx.load_cert_chain(cert_tmp, key_tmp)
+            print(f"[TLS] Client certificate loaded: {certificate.subject}")
+
+        finally:
+            # Always delete temp PEM files, even if load_cert_chain raised
+            for path in (cert_tmp, key_tmp):
+                if path and os.path.exists(path):
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+
+    except (ValueError, TypeError) as e:
+        raise RuntimeError(
+            f"Failed to decrypt .p12 certificate: {e}\n"
+            "  → Check password and verify this is a valid PKCS#12 file."
+        )
+
+
+def build_ssl_context(verify_cert: bool,
+                      cert_file: Optional[str] = None,
+                      cert_password: str = "") -> ssl.SSLContext:
+    """
+    Build an ssl.SSLContext for connecting to TAK Server on port 8089.
+
+    Args:
+        verify_cert:    If True, enforce server certificate chain validation.
+                        Set False (default) for self-signed TAK Server certs.
+                        To switch to True, pass --verify-cert on the CLI.
+                        To add full CA validation in future: load your TAK
+                        Server's CA cert with ctx.load_verify_locations().
+        cert_file:      Path to .p12 client cert file (optional).
+                        Required if TAK Server enforces mutual TLS.
+                        Leave None for anonymous TLS (server-only auth).
+        cert_password:  Password for the .p12 file (empty string if none).
+
+    Returns:
+        ssl.SSLContext ready to pass to ctx.wrap_socket()
+
+    Raises:
+        RuntimeError: if cert loading fails (bad password, missing package, etc.)
+    """
+    ctx = ssl.create_default_context()
+
+    # ── Server cert verification ──────────────────────────────────────────────
+    # WHY disabled by default: TAK Server ships with self-signed certs that are
+    # not in any public CA bundle. Enabling verification without also providing
+    # the TAK CA cert would cause every connection to fail with a cert error.
+    # When you're ready to enforce verification, enable --verify-cert AND add:
+    #   ctx.load_verify_locations("/path/to/tak-server-ca.pem")
+    if not verify_cert:
+        ctx.check_hostname = False
+        ctx.verify_mode    = ssl.CERT_NONE
+
+    # ── Client certificate (mutual TLS) ───────────────────────────────────────
+    if cert_file and os.path.isfile(cert_file):
+        print(f"[TLS] Loading client certificate: {cert_file}")
+        _load_p12_into_context(ctx, cert_file, cert_password)
+    elif cert_file:
+        print(f"[TLS] WARNING: cert file not found: {cert_file} — continuing without client cert")
+
+    return ctx
+
+
+# =============================================================================
 # TAK TCP CLIENT
 # Runs in a daemon thread. Connects to the TAK server, sends the SA beacon,
 # reads the incoming stream, and forwards each complete CoT event to the
@@ -301,6 +486,7 @@ def parse_cot_envelope(xml_str: str) -> dict:
 def tak_tcp_reader(host: str, port: int, uid: str, callsign: str,
                    lat: float, lon: float, beacon_interval: int,
                    use_tls: bool, verify_cert: bool,
+                   cert_file: Optional[str], cert_password: str,
                    filter_uid_prefix: Optional[str],
                    reconnect_delay: int = 5):
     """
@@ -319,6 +505,8 @@ def tak_tcp_reader(host: str, port: int, uid: str, callsign: str,
         beacon_interval:    Seconds between SA beacon re-sends (keep-alive)
         use_tls:            Wrap socket in TLS (for port 8089)
         verify_cert:        Enforce TLS certificate chain verification
+        cert_file:          Path to .p12 client certificate (or None)
+        cert_password:      Password for the .p12 file (or "")
         filter_uid_prefix:  If set, only forward events whose uid starts with this
         reconnect_delay:    Seconds to wait before reconnection attempt
     """
@@ -337,11 +525,11 @@ def tak_tcp_reader(host: str, port: int, uid: str, callsign: str,
             raw_sock.connect((host, port))
 
             if use_tls:
-                ctx = ssl.create_default_context()
-                if not verify_cert:
-                    # Common on tactical networks with self-signed certs
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
+                # build_ssl_context handles both anonymous TLS and mTLS (.p12 cert).
+                # Errors here (wrong password, missing cryptography lib) are caught
+                # by the outer except block and trigger a reconnection with an error
+                # message broadcast to the browser.
+                ctx  = build_ssl_context(verify_cert, cert_file, cert_password)
                 sock = ctx.wrap_socket(raw_sock, server_hostname=host)
             else:
                 sock = raw_sock
@@ -363,6 +551,17 @@ def tak_tcp_reader(host: str, port: int, uid: str, callsign: str,
                 "lat": lat,
                 "lon": lon
             })
+
+            # Cache so late-connecting browser clients receive it immediately
+            # on WebSocket connect (see ws_handler).
+            global _bridge_identity
+            _bridge_identity = {
+                "type": "beacon_sent",
+                "callsign": callsign,
+                "uid": uid,
+                "lat": lat,
+                "lon": lon
+            }
 
             # ── Stream reader ──────────────────────────────────────────────────
             buffer = ""
@@ -459,6 +658,16 @@ Examples:
     p.add_argument("--verify-cert", action="store_true", default=False,
                    help="Enforce TLS certificate verification (default: disabled for self-signed certs)")
 
+    # Client certificate for mutual TLS (mTLS)
+    # TAK Server port 8089 typically requires a client cert issued from the
+    # TAK Server admin console (User Certs → Export → .p12).
+    p.add_argument("--cert-file",     default=None,
+                   help="Path to .p12 client certificate file for mutual TLS. "
+                        "Get this from TAK Server admin → User Certs → Export.")
+    p.add_argument("--cert-password", default="",
+                   help="Password for the .p12 file (default: empty string). "
+                        "NOTE: visible in 'ps aux' on this machine — acceptable for localhost lab use.")
+
     # Identity / appearance on the TAK map
     p.add_argument("--callsign",   default="CoT-Bridge",
                    help="Callsign shown on the ATAK map (default: CoT-Bridge)")
@@ -503,6 +712,9 @@ def main():
     print("  TAK Server CoT Listener / WebSocket Bridge")
     print("=" * 60)
     print(f"  TAK server:    {args.host}:{args.port} ({'TLS' if args.tls else 'TCP'})")
+    if args.tls:
+        print(f"  TLS verify:    {'yes' if args.verify_cert else 'no (self-signed mode)'}")
+        print(f"  Client cert:   {args.cert_file or '(none — anonymous TLS)'}")
     print(f"  Callsign:      {args.callsign}")
     print(f"  Listener UID:  {listener_uid}")
     print(f"  Position:      {args.lat}, {args.lon}")
@@ -525,6 +737,7 @@ def main():
             args.lat, args.lon,
             args.beacon_interval,
             args.tls, args.verify_cert,
+            args.cert_file, args.cert_password,
             args.filter_uid,
             args.reconnect_delay,
         ),

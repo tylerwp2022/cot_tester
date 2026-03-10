@@ -56,9 +56,11 @@ ENDPOINTS:
 
 import argparse
 import json
+import os
 import socket
 import ssl
 import sys
+import tempfile
 import time
 import urllib.request
 import urllib.error
@@ -79,6 +81,11 @@ cfg = {
     "protocol":   "tcp",   # "tcp" | "tcps" | "http" | "https"
     "tak_host":   "",
     "tak_port":   8088,
+    # Mutual TLS client certificate (.p12 from TAK Server admin console).
+    # Set by --cert-file / --cert-password CLI args.
+    # None = anonymous TLS (no client identity presented to server).
+    "cert_file":     None,
+    "cert_password": "",
 }
 
 # Minimal test CoT — sent by GET /test to verify connectivity
@@ -88,6 +95,125 @@ TEST_COT = """<?xml version="1.0" encoding="UTF-8"?>
   <point lat="0.0" lon="0.0" hae="0" ce="9999999.0" le="9999999.0"/>
   <detail><remarks>TAK CoT Proxy connectivity test</remarks></detail>
 </event>"""
+
+
+# ==============================================================================
+# TLS / SSL CONTEXT BUILDER
+#
+# See tak_listener.py for full design notes. This is the same implementation —
+# duplicated here so tak_cot_proxy.py remains a standalone script with no
+# dependency on tak_listener.py.
+#
+# TAK Server port 8089 uses mutual TLS (mTLS). This proxy needs a client cert
+# when the TAK Server is configured to require client authentication.
+# The cert (.p12) is obtained from TAK Server admin → User Certs → Export.
+#
+# verify_tls=False (default): skip verifying the server's certificate.
+# verify_tls=True:            enforce chain validation. Use --verify-cert flag,
+#                             and optionally load a CA cert file.
+# ==============================================================================
+
+def _load_p12_into_context(ctx: ssl.SSLContext, p12_path: str, password: str) -> None:
+    """
+    Load a PKCS#12 (.p12) client certificate into an existing SSLContext.
+
+    Requires the `cryptography` package: pip install cryptography
+
+    Decrypts the .p12 bundle, serializes key+cert to PEM in named temp files
+    (required by ssl.SSLContext.load_cert_chain), loads them, then immediately
+    unlinks the temp files to minimise disk exposure.
+
+    Raises RuntimeError on: missing library, wrong password, malformed .p12.
+    """
+    try:
+        from cryptography.hazmat.primitives.serialization import pkcs12
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding, PrivateFormat, NoEncryption
+        )
+    except ImportError:
+        raise RuntimeError(
+            "The 'cryptography' package is required for .p12 certificate support.\n"
+            "Install it with:  pip install cryptography"
+        )
+
+    try:
+        with open(p12_path, "rb") as f:
+            p12_data = f.read()
+
+        pw_bytes = password.encode("utf-8") if password else None
+        private_key, certificate, _chain = pkcs12.load_key_and_certificates(
+            p12_data, pw_bytes
+        )
+
+        if private_key is None or certificate is None:
+            raise RuntimeError(
+                f"No private key or certificate found in {p12_path}. "
+                "Is this a valid PKCS#12 file?"
+            )
+
+        cert_pem = certificate.public_bytes(Encoding.PEM)
+        key_pem  = private_key.private_bytes(
+            Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption()
+        )
+
+        cert_tmp = key_tmp = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as cf:
+                cf.write(cert_pem)
+                cert_tmp = cf.name
+            with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as kf:
+                kf.write(key_pem)
+                key_tmp = kf.name
+
+            ctx.load_cert_chain(cert_tmp, key_tmp)
+            log(f"[TLS] Client certificate loaded: {certificate.subject}")
+
+        finally:
+            for path in (cert_tmp, key_tmp):
+                if path and os.path.exists(path):
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+
+    except (ValueError, TypeError) as e:
+        raise RuntimeError(
+            f"Failed to decrypt .p12 certificate: {e}\n"
+            "  → Check password and verify this is a valid PKCS#12 file."
+        )
+
+
+def build_ssl_context() -> ssl.SSLContext:
+    """
+    Build an ssl.SSLContext from the current cfg dict for tcps:// connections.
+
+    Reads: cfg["verify_tls"], cfg["cert_file"], cfg["cert_password"]
+
+    If verify_tls=False (default): skip server cert chain validation.
+      To enable later: set verify_tls=True AND call
+      ctx.load_verify_locations("/path/to/tak-ca.pem")
+
+    If cert_file is set: load client certificate for mutual TLS (mTLS).
+      Required when TAK Server enforces client authentication on port 8089.
+
+    Raises RuntimeError if cert loading fails.
+    """
+    ctx = ssl.create_default_context()
+
+    if not cfg["verify_tls"]:
+        # WHY disabled: TAK Server self-signed certs won't pass Python's CA bundle.
+        # Use --verify-cert (sets verify_tls=True) when you have a proper CA cert.
+        ctx.check_hostname = False
+        ctx.verify_mode    = ssl.CERT_NONE
+        dbg("SSL server verification disabled (self-signed cert mode)")
+
+    if cfg["cert_file"] and os.path.isfile(cfg["cert_file"]):
+        dbg(f"Loading client certificate: {cfg['cert_file']}")
+        _load_p12_into_context(ctx, cfg["cert_file"], cfg["cert_password"])
+    elif cfg["cert_file"]:
+        log(f"WARNING: cert file not found: {cfg['cert_file']} — continuing without client cert")
+
+    return ctx
 
 
 # ==============================================================================
@@ -120,11 +246,9 @@ def send_via_tcp(xml_bytes: bytes):
 
             # Wrap in SSL if protocol is tcps (SSL/TCP, port 8089)
             if cfg["protocol"] == "tcps":
-                ctx = ssl.create_default_context()
-                if not cfg["verify_tls"]:
-                    ctx.check_hostname = False
-                    ctx.verify_mode    = ssl.CERT_NONE
-                    dbg("SSL verification disabled (self-signed cert mode)")
+                # build_ssl_context() handles both anonymous TLS and mTLS.
+                # If a client cert is loaded in cfg, it will be presented here.
+                ctx  = build_ssl_context()
                 sock = ctx.wrap_socket(sock, server_hostname=host)
                 dbg("SSL handshake complete")
 
@@ -193,11 +317,10 @@ def send_via_http(xml_bytes: bytes):
         )
 
         ssl_ctx = None
-        if cfg["protocol"] == "https" and not cfg["verify_tls"]:
-            ssl_ctx = ssl.create_default_context()
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode    = ssl.CERT_NONE
-            dbg("HTTPS TLS verification disabled")
+        if cfg["protocol"] == "https":
+            # build_ssl_context() respects verify_tls and cert_file settings
+            ssl_ctx = build_ssl_context()
+            dbg("HTTPS TLS context built")
 
         with urllib.request.urlopen(req, context=ssl_ctx, timeout=10) as resp:
             body   = resp.read().decode(errors="replace")
@@ -433,6 +556,13 @@ Full examples:
                         help="Port for this proxy to listen on (default: 8089)")
     parser.add_argument("--no-verify-tls", action="store_true",
                         help="Disable TLS cert verification (for self-signed certs)")
+    parser.add_argument("--cert-file",     default=None,
+                        help="Path to .p12 client certificate for mutual TLS. "
+                             "Required when TAK Server enforces client authentication on port 8089. "
+                             "Get from TAK Server admin → User Certs → Export.")
+    parser.add_argument("--cert-password", default="",
+                        help="Password for the .p12 file (default: empty). "
+                             "NOTE: visible in 'ps aux' — acceptable for localhost lab use.")
     parser.add_argument("--debug",         action="store_true",
                         help="Verbose debug output (show CoT preview, socket details)")
 
@@ -440,14 +570,16 @@ Full examples:
 
     protocol, base_url, tak_host, tak_port = parse_tak_url(args.tak_url)
 
-    cfg["proxy_port"] = args.proxy_port
-    cfg["tak_url"]    = base_url
-    cfg["tak_path"]   = args.tak_path if args.tak_path.startswith("/") else f"/{args.tak_path}"
-    cfg["verify_tls"] = not args.no_verify_tls
-    cfg["debug"]      = args.debug
-    cfg["protocol"]   = protocol
-    cfg["tak_host"]   = tak_host
-    cfg["tak_port"]   = tak_port
+    cfg["proxy_port"]    = args.proxy_port
+    cfg["tak_url"]       = base_url
+    cfg["tak_path"]      = args.tak_path if args.tak_path.startswith("/") else f"/{args.tak_path}"
+    cfg["verify_tls"]    = not args.no_verify_tls
+    cfg["debug"]         = args.debug
+    cfg["protocol"]      = protocol
+    cfg["tak_host"]      = tak_host
+    cfg["tak_port"]      = tak_port
+    cfg["cert_file"]     = args.cert_file
+    cfg["cert_password"] = args.cert_password
 
     proto_label = {
         "tcp":   "Raw TCP (CoT streaming, plain)",
@@ -470,6 +602,7 @@ Full examples:
     print(f"  Target     : {target_display}")
     if protocol in ("https", "tcps"):
         print(f"  TLS verify : {'yes' if cfg['verify_tls'] else 'NO (self-signed mode)'}")
+        print(f"  Client cert: {cfg['cert_file'] or '(none — anonymous TLS)'}")
     print(f"  Debug mode : {'ON' if cfg['debug'] else 'off  (use --debug for verbose output)'}")
     print()
     print("  In the CoT Builder, set:")

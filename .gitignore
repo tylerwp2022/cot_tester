@@ -18,3 +18,6 @@ Thumbs.db
 
 #Process ids
 .tak_launcher.pid
+
+#certs
+*.p12

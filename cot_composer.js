@@ -226,6 +226,29 @@ let allGroupsMemberCounter = 0;
 let allTeamsMemberCounter  = 0;
 
 /**
+ * Regenerate the group UUID and rebuild the XML preview.
+ *
+ * WHY THIS IS NECESSARY:
+ * The TAK server uses the group `id` UUID — not the chatroom display name or
+ * member list — as the routing key for group messages. Once a UUID is
+ * established for a group session, the server will continue routing to that
+ * same group even if you rename the chatroom or change the member list.
+ *
+ * Callers:
+ *   - chatGroupName oninput  → name change means a new logical group
+ *   - addChatMember          → adding a member creates a new group composition
+ *   - remove member button   → removing a member creates a new group composition
+ *
+ * We deliberately do NOT auto-regenerate on every buildChatXml() call —
+ * the UUID must be stable across multiple sends to the same group so ATAK
+ * threads them together correctly.
+ */
+function refreshGroupUuid() {
+  document.getElementById('chatGroupUid').value = genUuid();
+  buildChatXml();
+}
+
+/**
  * Add a callsign + UID row to the group chat member list.
  * @param {string} [callsign] - Pre-fill callsign (used by loadPresetIntoForm)
  * @param {string} [uid]      - Pre-fill UID
@@ -246,10 +269,11 @@ function addChatMember(callsign, uid) {
            style="font-family:'Courier New',monospace;font-size:0.72rem;"
            oninput="buildChatXml()" onchange="buildChatXml()"/>
     <button type="button"
-            onclick="document.getElementById('${id}').remove(); buildChatXml();"
+            onclick="document.getElementById('${id}').remove(); refreshGroupUuid();"
             style="padding:4px 8px;color:#f85149;border-color:#f85149;font-size:0.75rem;flex-shrink:0;">✕</button>`;
   document.getElementById('chatMemberList').appendChild(row);
-  buildChatXml();
+  // Adding a member changes the group composition → new group UUID required
+  refreshGroupUuid();
 }
 
 /** Read all group chat members from the dynamic list. */
@@ -379,8 +403,8 @@ function onRoleSelectChange() {
  */
 function buildChatXml() {
   const mode           = document.querySelector('input[name="chatMode"]:checked')?.value || 'direct';
-  const senderCallsign = document.getElementById('chatSenderCallsign').value.trim() || 'SENDER';
-  const senderUid      = document.getElementById('chatSenderUid').value.trim()      || 'ANDROID-example0000000001';
+  const senderCallsign = document.getElementById('chatSenderCallsign').value.trim() || 'CoT-Bridge';
+  const senderUid      = document.getElementById('chatSenderUid').value.trim()      || 'tak-listener-unknown';
   const serverDest     = document.getElementById('chatServerDest').value.trim()     || '';
   const messageText    = document.getElementById('chatMessage').value.trim()        || '';
 

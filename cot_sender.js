@@ -419,6 +419,39 @@ async function sendRawXml(xml, label) {
 // =============================================================================
 
 /**
+ * Update the inline status badge next to the "▶ Send Chat" button.
+ * Mirrors the pattern used by deleteSetStatus / emergencySetStatus.
+ *
+ * WHY INLINE BADGE: The main setStatus() bar is in the TAK Server panel,
+ * which is visually distant from the chat composer. An inline badge gives
+ * immediate feedback right at the button the user just clicked.
+ *
+ * @param {'sending'|'ok'|'error'} state
+ * @param {string} message
+ */
+function chatSetStatus(state, message) {
+  const wrap = document.getElementById('chatSendStatus');
+  const icon = document.getElementById('chatSendIcon');
+  const text = document.getElementById('chatSendText');
+  if (!wrap) return;
+  const styles = {
+    sending: { color: '#f0883e', bg: '#2d2218', border: '#f0883e66', icon: '⏳' },
+    ok:      { color: '#3fb950', bg: '#182d1d', border: '#3fb95066', icon: '✓'  },
+    error:   { color: '#f85149', bg: '#2d1b1b', border: '#f8514966', icon: '✗'  },
+  };
+  const s = styles[state] || styles.error;
+  wrap.style.display     = 'flex';
+  wrap.style.background  = s.bg;
+  wrap.style.borderColor = s.border;
+  icon.style.color  = s.color;
+  icon.textContent  = s.icon;
+  text.style.color  = s.color;
+  text.textContent  = message;
+  // Auto-hide success badge after 4 seconds — errors stay visible
+  if (state === 'ok') setTimeout(() => { wrap.style.display = 'none'; }, 4000);
+}
+
+/**
  * Send the currently composed chat message to the TAK server.
  * Validates that message text is present before sending.
  * Called by the "▶ Send Chat" button in the GeoChat composer.
@@ -460,6 +493,7 @@ async function sendChatMessage() {
                       all: 'ALL', allgroups: 'ALL GROUPS', allteams: 'ALL TEAMS' }[mode] || '';
 
   setStatus('sending', `Sending${modeLabel ? ' ' + modeLabel : ''} chat from ${sender} to ${recipient}…`);
+  chatSetStatus('sending', `Sending to ${recipient}…`);
   appendLog(
     `[CHAT${modeLabel ? ' ' + modeLabel : ''}] ${sender} → ${recipient}: "${msg}"`,
     'info'
@@ -474,14 +508,17 @@ async function sendChatMessage() {
     });
     if (resp.ok) {
       setStatus('ok', `Chat delivered to ${recipient}.`, resp.status);
+      chatSetStatus('ok', `✓ Delivered to ${recipient}`);
       appendLog(`✓ ${resp.status} ${resp.statusText}`, 'ok');
     } else {
       const body = await resp.text().catch(() => '');
       setStatus('error', 'Server error.', resp.status);
+      chatSetStatus('error', `${resp.status} ${resp.statusText}`);
       appendLog(`✗ ${resp.status} — ${body.substring(0, 120)}`, 'error');
     }
   } catch (err) {
     setStatus('error', `Network error — ${err.message}`);
+    chatSetStatus('error', 'Network error — is the proxy running?');
     appendLog(`✗ ${err.message}`, 'error');
     appendLog('  → Is the proxy running?', 'warn');
   }

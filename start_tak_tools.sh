@@ -185,17 +185,21 @@ if [ ! -f "$INDEX_HTML" ]; then
     warn "Launcher is running — open index.html manually."
 else
     info "Opening index.html in browser..."
-    # Try common Linux browser openers
-    if command -v xdg-open &>/dev/null; then
-        xdg-open "file://${INDEX_HTML}" &
+    # WHY setsid: bare `&` leaves the browser in the terminal's process group.
+    # Ctrl+C would propagate SIGINT to Firefox and close all its windows.
+    # setsid starts it in a new session, fully detached from this terminal.
+    # WHY --new-window: opens a dedicated window for the CoT builder rather
+    # than a tab inside an existing Firefox window.
+    if command -v firefox &>/dev/null; then
+        setsid firefox --new-window "file://${INDEX_HTML}" >/dev/null 2>&1 &
+    elif command -v xdg-open &>/dev/null; then
+        setsid xdg-open "file://${INDEX_HTML}" >/dev/null 2>&1 &
     elif command -v gnome-open &>/dev/null; then
-        gnome-open "file://${INDEX_HTML}" &
-    elif command -v firefox &>/dev/null; then
-        firefox "file://${INDEX_HTML}" &
+        setsid gnome-open "file://${INDEX_HTML}" >/dev/null 2>&1 &
     elif command -v google-chrome &>/dev/null; then
-        google-chrome "file://${INDEX_HTML}" &
+        setsid google-chrome --new-window "file://${INDEX_HTML}" >/dev/null 2>&1 &
     elif command -v chromium-browser &>/dev/null; then
-        chromium-browser "file://${INDEX_HTML}" &
+        setsid chromium-browser --new-window "file://${INDEX_HTML}" >/dev/null 2>&1 &
     else
         warn "Could not detect browser opener. Open manually:"
         warn "  file://${INDEX_HTML}"
@@ -212,9 +216,14 @@ echo ""
 echo "  In the browser: click ⚡ Connect to Launcher, then"
 echo "  use the 🚀 Launcher panel to start tak_listener / tak_cot_proxy."
 echo ""
-echo "  To stop everything: ./stop_tak_tools.sh  or  Ctrl+C here"
+echo "  To stop everything: ./stop_tak_tools.sh"
+echo "  (Closing this terminal leaves tak_launcher.py running in the background)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Keep the terminal open so the user can see the output / use Ctrl+C
-# The launcher itself runs in the background so this just waits.
-wait
+# Keep the terminal open so the user can see the output.
+# WHY trap+sleep instead of bare `wait`:
+#   `wait` re-raises the signal that interrupted it, propagating SIGINT into
+#   the process group on Ctrl+C. The trap below intercepts it cleanly and
+#   exits with 0 — tak_launcher.py keeps running, Firefox is untouched.
+trap 'echo ""; info "Terminal closed. tak_launcher.py is still running."; info "Run ./stop_tak_tools.sh to shut everything down."; exit 0' INT TERM
+while true; do sleep 1; done

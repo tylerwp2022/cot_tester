@@ -692,11 +692,13 @@ async function sendPreset() {
   if (!base) {
     appendLog('ERROR: No server URL set. Fill in the TAK Server section above.', 'error');
     setStatus('error', 'No server URL — fill in the TAK Server section.');
+    presetSetStatus('error', 'No server URL configured');
     return;
   }
 
   const url   = `${base}${path}`;
   const label = PRESETS[selectedPresetKey].label;
+  presetSetStatus('sending', 'Sending…');
   setStatus('sending', `Sending preset "${label}" to ${url}…`);
   appendLog(`[PRESET: ${label}] POST ${url}`, 'info');
 
@@ -709,15 +711,18 @@ async function sendPreset() {
     if (resp.ok) {
       setStatus('ok', 'Preset delivered.', resp.status);
       appendLog(`✓ ${resp.status} ${resp.statusText}`, 'ok');
+      presetSetStatus('ok', `"${label}" delivered`);
     } else {
       const body = await resp.text().catch(() => '');
       setStatus('error', 'Server returned an error.', resp.status);
       appendLog(`✗ ${resp.status} ${resp.statusText} — ${body.substring(0, 120)}`, 'error');
+      presetSetStatus('error', `Server error ${resp.status}`);
     }
   } catch (err) {
     setStatus('error', `Network error — ${err.message}`);
     appendLog(`✗ Network error: ${err.message}`, 'error');
     appendLog('  → Is the proxy running? Check the TAK Server section above.', 'warn');
+    presetSetStatus('error', 'Network error — is proxy running?');
   }
 }
 

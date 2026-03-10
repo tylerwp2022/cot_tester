@@ -49,12 +49,14 @@ ENDPOINTS:
 """
 
 import argparse
+import base64
 import collections
 import json
 import os
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -237,6 +239,101 @@ proxy_proc:    ManagedProcess | None = None
 
 
 # =============================================================================
+# CERTIFICATE STATE
+#
+# Tracks the current client certificate for mutual TLS (mTLS) connections to
+# TAK Server on port 8089. The cert is uploaded as base64 JSON from the
+# browser, written to a temp file, and passed to child processes as CLI args.
+#
+# Security notes:
+#   - Password is held in memory only — never written to disk.
+#   - Temp .p12 file is created in /tmp with a random name.
+#   - If save_to_disk=True, a copy is saved as tak_client.p12 in the script
+#     directory for convenience across restarts (still needs password entry).
+#   - CLI args are visible in `ps aux` on this machine — acceptable for a
+#     localhost lab tool on a trusted network.
+# =============================================================================
+
+cert_state = {
+    "loaded":       False,   # True when a cert is staged and ready for use
+    "temp_path":    None,    # Path to /tmp copy of the .p12 (in-memory lifespan)
+    "disk_path":    None,    # Path to saved copy on disk (persistent, or None)
+    "password":     None,    # Plaintext password (memory only — never written to disk)
+    "filename":     "",      # Original filename for display (e.g. "tyler_tak.p12")
+    "saved_to_disk": False,  # Whether a disk copy exists from this session
+}
+
+# Lock for cert_state — modified from HTTP handler threads
+cert_lock = threading.Lock()
+
+
+def _cert_saved_path(script_dir: str) -> str:
+    """Return the conventional path for the on-disk cert in the script directory."""
+    return os.path.join(script_dir, "tak_client.p12")
+
+
+def cert_load_from_disk(script_dir: str) -> bool:
+    """
+    Check if a saved tak_client.p12 exists in the script directory.
+    If so, copy it to a temp file and set cert_state["disk_path"] so the
+    browser knows to prompt for the password.
+
+    WHY: On repeated sessions the cert file is already on disk, saving the
+    user from re-uploading it. They still need to enter the password because
+    we never persist it.
+
+    Returns True if a saved cert was found, False otherwise.
+    """
+    saved = _cert_saved_path(script_dir)
+    if not os.path.isfile(saved):
+        return False
+
+    with cert_lock:
+        cert_state["disk_path"] = saved
+        # Don't set loaded=True here — password still needed
+        # The browser will detect "disk_path set but not loaded" and prompt
+        print(f"[CERT] Found saved cert on disk: {saved}")
+    return True
+
+
+def cert_clear() -> None:
+    """
+    Remove the in-memory cert state and delete the temp file.
+    Does NOT delete the on-disk saved copy — that requires explicit user action.
+    """
+    with cert_lock:
+        tmp = cert_state.get("temp_path")
+        if tmp and os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        cert_state["loaded"]      = False
+        cert_state["temp_path"]   = None
+        cert_state["password"]    = None
+        cert_state["filename"]    = ""
+        # Keep disk_path and saved_to_disk — those survive clears
+
+
+def inject_cert_args(argv: list) -> list:
+    """
+    If a cert is loaded, append --cert-file and --cert-password to argv.
+    Called by the start/listener and start/proxy handlers before spawning
+    child processes so both scripts get the cert without the browser needing
+    to know the temp file path.
+
+    This is separate from build_argv() which only processes browser-supplied
+    config fields — the cert path is internal to the launcher.
+    """
+    with cert_lock:
+        if cert_state["loaded"] and cert_state["temp_path"]:
+            argv = argv + ["--cert-file", cert_state["temp_path"]]
+            if cert_state["password"]:
+                argv = argv + ["--cert-password", cert_state["password"]]
+    return argv
+
+
+# =============================================================================
 # ARGUMENT BUILDER
 # Converts a JSON dict from the browser into a flat argv list for Popen.
 # =============================================================================
@@ -317,6 +414,17 @@ class LauncherHandler(BaseHTTPRequestHandler):
                 "proxy":    proxy_proc.status()    if proxy_proc    else {},
             })
 
+        elif path == "/cert-status":
+            with cert_lock:
+                self._json(200, {
+                    "loaded":        cert_state["loaded"],
+                    "filename":      cert_state["filename"],
+                    "saved_to_disk": cert_state["saved_to_disk"],
+                    # Tells the browser "a saved cert exists — enter password to activate"
+                    "disk_cert_available": cert_state["disk_path"] is not None
+                                           and os.path.isfile(cert_state["disk_path"] or ""),
+                })
+
         elif path == "/logs/listener":
             self._json(200, listener_proc.get_logs(n) if listener_proc else [])
 
@@ -341,6 +449,7 @@ class LauncherHandler(BaseHTTPRequestHandler):
         # ── /start/listener ───────────────────────────────────────────────
         if path == "/start/listener":
             argv = build_argv(config, LISTENER_ARGS)
+            argv = inject_cert_args(argv)  # append --cert-file/--cert-password if loaded
             ok, msg = listener_proc.start(argv)
             print(f"[LAUNCHER] {msg}")
             self._json(200 if ok else 400, {"ok": ok, "message": msg})
@@ -348,9 +457,129 @@ class LauncherHandler(BaseHTTPRequestHandler):
         # ── /start/proxy ──────────────────────────────────────────────────
         elif path == "/start/proxy":
             argv = build_argv(config, PROXY_ARGS)
+            argv = inject_cert_args(argv)  # append --cert-file/--cert-password if loaded
             ok, msg = proxy_proc.start(argv)
             print(f"[LAUNCHER] {msg}")
             self._json(200 if ok else 400, {"ok": ok, "message": msg})
+
+        # ── /upload-cert ──────────────────────────────────────────────────
+        # Accepts JSON: { "cert_b64": "<base64>", "filename": "user.p12",
+        #                 "password": "secret", "save_to_disk": false }
+        # Writes the cert to a temp file, optionally saves to disk.
+        # Responds: { "ok": true/false, "message": "..." }
+        elif path == "/upload-cert":
+            filename    = config.get("filename", "cert.p12")
+            password    = config.get("password", "")
+            cert_b64    = config.get("cert_b64", "")
+            save_to_disk = bool(config.get("save_to_disk", False))
+
+            if not cert_b64:
+                self._json(400, {"ok": False, "message": "No cert data received (cert_b64 empty)"})
+                return
+
+            try:
+                cert_bytes = base64.b64decode(cert_b64)
+            except Exception as e:
+                self._json(400, {"ok": False, "message": f"Invalid base64 data: {e}"})
+                return
+
+            try:
+                # Clear any previously loaded cert first
+                cert_clear()
+
+                # Write to a new temp file that will persist until cert_clear()
+                fd, tmp_path = tempfile.mkstemp(suffix=".p12", prefix="tak_cert_")
+                with os.fdopen(fd, "wb") as f:
+                    f.write(cert_bytes)
+
+                disk_path = None
+                if save_to_disk:
+                    here = os.path.dirname(os.path.abspath(__file__))
+                    disk_path = _cert_saved_path(here)
+                    with open(disk_path, "wb") as f:
+                        f.write(cert_bytes)
+                    print(f"[CERT] Saved cert to disk: {disk_path}")
+
+                with cert_lock:
+                    cert_state["loaded"]       = True
+                    cert_state["temp_path"]    = tmp_path
+                    cert_state["password"]     = password
+                    cert_state["filename"]     = filename
+                    cert_state["disk_path"]    = disk_path
+                    cert_state["saved_to_disk"] = save_to_disk
+
+                msg = (f"Certificate loaded: {filename} "
+                       f"({'saved to disk' if save_to_disk else 'in-memory only'})")
+                print(f"[CERT] {msg}")
+                self._json(200, {"ok": True, "message": msg})
+
+            except OSError as e:
+                self._json(500, {"ok": False, "message": f"Failed to write cert file: {e}"})
+
+        # ── /activate-saved-cert ──────────────────────────────────────────
+        # Use the on-disk saved cert with a freshly entered password.
+        # Body: { "password": "secret" }
+        elif path == "/activate-saved-cert":
+            password = config.get("password", "")
+            with cert_lock:
+                disk_path = cert_state.get("disk_path")
+
+            if not disk_path or not os.path.isfile(disk_path):
+                self._json(400, {"ok": False,
+                                 "message": "No saved cert found on disk (upload one first)"})
+                return
+
+            try:
+                cert_clear()
+
+                # Copy disk cert to a fresh temp file
+                with open(disk_path, "rb") as f:
+                    cert_bytes = f.read()
+                fd, tmp_path = tempfile.mkstemp(suffix=".p12", prefix="tak_cert_")
+                with os.fdopen(fd, "wb") as f:
+                    f.write(cert_bytes)
+
+                with cert_lock:
+                    cert_state["loaded"]       = True
+                    cert_state["temp_path"]    = tmp_path
+                    cert_state["password"]     = password
+                    cert_state["disk_path"]    = disk_path
+                    cert_state["saved_to_disk"] = True
+                    cert_state["filename"]     = os.path.basename(disk_path)
+
+                msg = f"Saved cert activated: {os.path.basename(disk_path)}"
+                print(f"[CERT] {msg}")
+                self._json(200, {"ok": True, "message": msg})
+
+            except OSError as e:
+                self._json(500, {"ok": False, "message": f"Failed to activate saved cert: {e}"})
+
+        # ── /clear-cert ───────────────────────────────────────────────────
+        elif path == "/clear-cert":
+            cert_clear()
+            print("[CERT] Certificate cleared from memory")
+            self._json(200, {"ok": True, "message": "Certificate cleared"})
+
+        # ── /delete-saved-cert ────────────────────────────────────────────
+        elif path == "/delete-saved-cert":
+            here = os.path.dirname(os.path.abspath(__file__))
+            disk_path = _cert_saved_path(here)
+            cert_clear()
+            if os.path.isfile(disk_path):
+                try:
+                    os.unlink(disk_path)
+                    with cert_lock:
+                        cert_state["disk_path"]     = None
+                        cert_state["saved_to_disk"] = False
+                    print(f"[CERT] Deleted saved cert: {disk_path}")
+                    self._json(200, {"ok": True, "message": "Saved cert deleted from disk"})
+                except OSError as e:
+                    self._json(500, {"ok": False, "message": f"Failed to delete: {e}"})
+            else:
+                with cert_lock:
+                    cert_state["disk_path"]     = None
+                    cert_state["saved_to_disk"] = False
+                self._json(200, {"ok": True, "message": "No saved cert found to delete"})
 
         # ── /stop/all ─────────────────────────────────────────────────────
         elif path == "/stop/all":
@@ -422,6 +651,12 @@ Custom paths (if scripts are not in the same directory):
 
     listener_proc = ManagedProcess("tak_listener", listener_path)
     proxy_proc    = ManagedProcess("tak_cot_proxy", proxy_path)
+
+    # Check for a previously saved client certificate on disk.
+    # Sets cert_state["disk_path"] if found so the browser can prompt
+    # for the password to re-activate it without re-uploading.
+    here = os.path.dirname(os.path.abspath(__file__))
+    cert_load_from_disk(here)
 
     print("=" * 60)
     print("  TAK Tools Launcher")
