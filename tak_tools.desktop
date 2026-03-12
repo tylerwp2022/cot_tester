@@ -3,8 +3,8 @@ Version=1.0
 Type=Application
 Name=CoT Message Builder
 Comment=Start TAK tools and open CoT Message Builder in browser
-# UPDATE THIS PATH to wherever you put the scripts:
-Exec=/bin/bash -c "cd /home/warthog/CoT_Tester && ./start_tak_tools.sh"
+Path=/home/tyler/cot_tester
+Exec=/bin/bash -c "./start_tak_tools.sh || (echo 'FAILED — press Enter to close'; read)"
 Icon=network-transmit-receive
 Terminal=true
 Categories=Network;Utility;

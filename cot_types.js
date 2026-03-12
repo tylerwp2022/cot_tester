@@ -149,13 +149,19 @@ function describeType(type) {
     // 3 — Category: type of entity within the dimension
     { 'U': 'Unit (human)', 'E': 'Equipment', 'I': 'Installation', 'M': 'Machine', 'G': 'Group' },
     // 4 — Subcategory: functional role/branch
+    // WHY 'U': 'Combat Support' here: confirmed from Skydio GCS CoT (a-f-G-U-U-M-A).
+    // 2525C uses U=Combat Support at this position, distinct from U=Unit at position 3.
     { 'C': 'Combat Arms', 'V': 'Vehicle', 'F': 'Unmanned/Fixed-Wing',
-      'R': 'Rotary Wing', 'S': 'Support', 'H': 'Helicopter/Rotary', 'Q': 'Robot/Drone' },
+      'R': 'Rotary Wing', 'S': 'Support', 'H': 'Helicopter/Rotary',
+      'Q': 'Robot/Drone', 'U': 'Combat Support' },
     // 5 — Sub-subcategory
+    // 'M': 'Military Intelligence' confirmed from Skydio GCS (a-f-G-U-U-M-A).
     { 'U': 'Unmanned', 'I': 'Individual', 'F': 'Leader', 'A': 'Aviation',
-      'Q': 'Robot/UGV', 'V': 'Vehicle/UAV family' },
+      'Q': 'Robot/UGV', 'V': 'Vehicle/UAV family', 'M': 'Military Intelligence' },
     // 6 — Modifier 1
-    { 'U': 'Unmanned Aerial Vehicle', 'F': 'Fixed Wing', 'R': 'Rotary Wing', 'Q': 'Drone (RPV)' },
+    // 'A': 'Aerial Exploitation' confirmed from Skydio GCS (a-f-G-U-U-M-A).
+    { 'U': 'Unmanned Aerial Vehicle', 'F': 'Fixed Wing', 'R': 'Rotary Wing',
+      'Q': 'Drone (RPV)', 'A': 'Aerial Exploitation' },
     // 7 — Modifier 2
     { 'R': 'Rotary Wing', 'F': 'Fixed Wing', 'Q': 'Drone' },
   ];
@@ -190,6 +196,10 @@ function describeType(type) {
     'b-a-o-pan':         '🆘 Emergency — Panic / 911 (active alert)',
     'b-a-o-can':         '✅ Emergency Cancel — clears active alert on all devices',
     'b-a-o':             '🚨 Emergency alert (generic)',
+    // Suspect/Joker/Faker — pending classification
+    'a-s-G':             '🟡 Suspect Ground — pending classification (placed marker)',
+    'a-j-G':             'Joker Ground — exercise/simulation hostile',
+    'a-k-G':             'Faker Ground — exercise/simulation friendly acting hostile',
   };
 
   if (specialTypes[type]) return specialTypes[type];
@@ -253,9 +263,9 @@ function updateTypeHelper() {
     { part: parts[1], meanings: { 'f': '🟦 Friendly', 'h': '🟥 Hostile', 'n': '⬜ Neutral', 'u': '❓ Unknown', 's': '🟡 Suspect' } },
     { part: parts[2], meanings: { 'G': '🚶 Ground', 'A': '✈️ Air', 'S': '🚢 Sea Surface', 'U': '🤿 Subsurface', 'F': '🎖️ SOF' } },
     { part: parts[3], meanings: { 'U': 'Unit (human)', 'E': 'Equipment', 'I': 'Installation', 'M': 'Machine', 'G': 'Group' } },
-    { part: parts[4], meanings: { 'C': 'Combat Arms', 'V': 'Vehicle', 'F': 'Unmanned/Fixed-Wing', 'R': 'Rotary Wing', 'S': 'Support', 'H': 'Helicopter/Rotary', 'Q': 'Robot/Drone' } },
-    { part: parts[5], meanings: { 'U': 'Unmanned', 'I': 'Individual', 'F': 'Leader', 'A': 'Aviation', 'Q': 'Robot/UGV', 'V': 'Vehicle/UAV family' } },
-    { part: parts[6], meanings: { 'U': 'Unmanned Aerial Vehicle', 'F': 'Fixed Wing', 'R': 'Rotary Wing', 'Q': 'Drone (RPV)' } },
+    { part: parts[4], meanings: { 'C': 'Combat Arms', 'V': 'Vehicle', 'F': 'Unmanned/Fixed-Wing', 'R': 'Rotary Wing', 'S': 'Support', 'H': 'Helicopter/Rotary', 'Q': 'Robot/Drone', 'U': 'Combat Support' } },
+    { part: parts[5], meanings: { 'U': 'Unmanned', 'I': 'Individual', 'F': 'Leader', 'A': 'Aviation', 'Q': 'Robot/UGV', 'V': 'Vehicle/UAV family', 'M': 'Military Intelligence' } },
+    { part: parts[6], meanings: { 'U': 'Unmanned Aerial Vehicle', 'F': 'Fixed Wing', 'R': 'Rotary Wing', 'Q': 'Drone (RPV)', 'A': 'Aerial Exploitation' } },
     { part: parts[7], meanings: { 'R': 'Rotary Wing', 'F': 'Fixed Wing', 'Q': 'Drone' } },
   ];
 

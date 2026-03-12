@@ -356,6 +356,20 @@
         <span>listener → <span id="previewListenerConn" style="color:#79c0ff;">10.10.10.3:8088 TCP</span></span>
         <span>proxy → <span id="previewProxyUrl" style="color:#79c0ff;">tcp://10.10.10.3:8088</span></span>
       </div>
+      <!-- Save Defaults: persists tak_host/tak_port/tak_tls/tak_skip_verify to
+           localStorage so the correct TAK server is pre-filled on every launch.
+           Restored automatically in DOMContentLoaded before any preview render. -->
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+        <button onclick="saveServerDefaults()"
+                style="font-size:0.72rem;padding:4px 12px;color:#58a6ff;border-color:#58a6ff;"
+                title="Save TAK server connection settings as defaults for next launch">
+          💾 Save Defaults
+        </button>
+        <span id="saveDefaultsStatus"
+              style="font-size:0.7rem;color:#3fb950;opacity:0;transition:opacity 0.4s;">
+          ✓ Saved
+        </span>
+      </div>
     </div>
 
     <!-- ── TLS Client Certificate ── -->
@@ -789,6 +803,13 @@
                 <input type="checkbox" class="filterAffil" data-key="n" checked
                        style="width:auto;accent-color:#79c0ff;" onchange="listenerApplyFilter()"/>
                 <span style="color:#79c0ff;">●</span> Neutral
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
+                             background:#21262d;border:1px solid #30363d;border-radius:4px;
+                             padding:4px 8px;font-size:0.72rem;color:#c9d1d9;">
+                <input type="checkbox" class="filterAffil" data-key="s" checked
+                       style="width:auto;accent-color:#e3b341;" onchange="listenerApplyFilter()"/>
+                <span style="color:#e3b341;">●</span> Suspect
               </label>
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;
                              background:#21262d;border:1px solid #30363d;border-radius:4px;
@@ -1535,6 +1556,7 @@
             <span style="font-size:0.75rem;color:#8b949e;">Skip TLS certificate verification</span>
           </label>
         </div>
+
       </div>
 
       <div>
@@ -1997,6 +2019,16 @@ Fill in callsign and UID to see generated XML...</pre>
         <div class="preset-card-title">🚁 UAV — Rotary RPV (Air)</div>
         <div class="preset-card-type">a-f-A-M-H-Q</div>
         <div class="preset-card-desc">Rotary drone under Air dimension.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('skydio_drone')" id="card-skydio_drone">
+        <div class="preset-card-title">🛸 Skydio Drone</div>
+        <div class="preset-card-type">a-f-A-M-H-Q</div>
+        <div class="preset-card-desc">Enterprise autonomous drone. Includes RTSP video URL and camera sensor FOV overlay. Confirmed from live ATAK stream.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('skydio_gcs')" id="card-skydio_gcs">
+        <div class="preset-card-title">🎮 Skydio Ground Control Station</div>
+        <div class="preset-card-type">a-f-G-U-U-M-A</div>
+        <div class="preset-card-desc">Skydio GCS operator station. Ground-based machine aviation asset. Minimal detail block matches confirmed live capture.</div>
       </div>
       <div class="preset-card" onclick="selectPreset('hostile_vehicle')" id="card-hostile_vehicle">
         <div class="preset-card-title">🟥 Hostile Vehicle</div>
@@ -2788,10 +2820,83 @@ function syncProxyPortHint() {
   if (hint) hint.textContent = port;
 }
 
+// =============================================================================
+// PERSISTENT CONNECTION DEFAULTS  (localStorage)
+// =============================================================================
+//
+// WHY localStorage: index.html is opened directly as a file:// URL with no
+// server session. localStorage persists across page reloads and browser
+// restarts for the same file path, making it the right tool here.
+//
+// Fields saved: tak_host, tak_port, tak_tls, tak_skip_verify
+//   (the shared "🌐 TAK Server Connection" block used by both listener & proxy)
+//
+// Usage: click "💾 Save Defaults" in the TAK Server Connection panel.
+//        Settings are restored automatically on every page load.
+// =============================================================================
+
+const TAK_DEFAULTS_KEY = 'cotTester_serverDefaults';
+
+// Save the four shared TAK connection fields to localStorage and flash
+// a brief "✓ Saved" confirmation next to the button.
+function saveServerDefaults() {
+  const get = id => document.getElementById(id);
+
+  const defaults = {
+    tak_host:        get('tak_host')?.value        ?? '',
+    tak_port:        get('tak_port')?.value        ?? '',
+    tak_tls:         get('tak_tls')?.checked       ?? false,
+    tak_skip_verify: get('tak_skip_verify')?.checked ?? true,
+  };
+
+  try {
+    localStorage.setItem(TAK_DEFAULTS_KEY, JSON.stringify(defaults));
+  } catch (e) {
+    console.error('[CoT Tester] Failed to save defaults:', e);
+    return;
+  }
+
+  // Flash "✓ Saved" confirmation for 1.5 s
+  const status = get('saveDefaultsStatus');
+  if (status) {
+    status.style.opacity = '1';
+    setTimeout(() => { status.style.opacity = '0'; }, 1500);
+  }
+}
+
+// Restore saved defaults into the shared TAK Server Connection fields.
+// Called once from DOMContentLoaded — silently no-ops if nothing is saved yet.
+function loadServerDefaults() {
+  let saved;
+  try {
+    const raw = localStorage.getItem(TAK_DEFAULTS_KEY);
+    if (!raw) return;              // first launch — nothing saved yet
+    saved = JSON.parse(raw);
+  } catch (e) {
+    console.warn('[CoT Tester] Could not load saved defaults:', e);
+    return;
+  }
+
+  const host = document.getElementById('tak_host');
+  const port = document.getElementById('tak_port');
+  const tls  = document.getElementById('tak_tls');
+  const skip = document.getElementById('tak_skip_verify');
+
+  if (host && saved.tak_host        !== undefined) host.value   = saved.tak_host;
+  if (port && saved.tak_port        !== undefined) port.value   = saved.tak_port;
+  if (tls  && saved.tak_tls         !== undefined) tls.checked  = saved.tak_tls;
+  if (skip && saved.tak_skip_verify !== undefined) skip.checked = saved.tak_skip_verify;
+
+  // Re-render the live connection preview pills so they reflect restored values,
+  // not the hardcoded HTML defaults.
+  if (typeof syncSharedTakPreview === 'function') syncSharedTakPreview();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const pp = document.getElementById('pp_proxy_port');
   if (pp) pp.addEventListener('input', syncProxyPortHint);
-  syncSharedTakPreview();   // initialise the preview pills from default values
+  loadServerDefaults();            // restore saved connection settings first
+  syncSharedTakPreview();          // initialise the preview pills from default values
   updateEndpointPreview();
 });
 
@@ -2869,7 +2974,7 @@ listenerApplyFilter = function() {
     return;
   }
 
-  const affilColors = { f:'#3fb950', h:'#f85149', u:'#f0883e', n:'#79c0ff' };
+  const affilColors = { f:'#3fb950', h:'#f85149', u:'#f0883e', n:'#79c0ff', s:'#e3b341' };
 
   queue.innerHTML = visible.map(m => {
     const seq        = m._seq;

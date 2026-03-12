@@ -312,6 +312,125 @@ const PRESETS = {
 </event>`,
   },
 
+  // ── Skydio Drone ─────────────────────────────────────────────────────────
+  // type a-f-A-M-H-Q confirmed from live Skydio ATAK stream.
+  //
+  // WHY Air dimension (a-f-A) not Ground:
+  //   Skydio is an enterprise-class autonomous drone with onboard GPS and
+  //   its own SA broadcasting stack. Unlike the Parrot Anafi (organic UAS
+  //   equipment treated as a ground unit asset), Skydio registers itself
+  //   directly on the TAK network as an airborne asset. Air dimension is
+  //   appropriate here.
+  //
+  // WHY <__video> block included:
+  //   The Skydio broadcasts its RTSP stream URL in the CoT detail block.
+  //   ATAK uses this to offer a tap-to-view video feed on the map icon.
+  //   Replace the IP/port with your Skydio's actual stream address.
+  //
+  // WHY <sensor> block included:
+  //   The sensor element drives the camera footprint overlay in ATAK —
+  //   the blue cone showing what the drone camera can see. Values below
+  //   are confirmed from the real capture (vfov, fov, azimuth, range).
+  //
+  // WHY _flow-tags_ OMITTED:
+  //   _flow-tags_ is injected by the TAK server during relay to record
+  //   routing history. Including it in outbound CoT is incorrect — the
+  //   server will re-add it automatically.
+  //
+  // UID FORMAT NOTE:
+  //   Skydio generates its own hardware-based UID (e.g. "E1.0J.A.00D58Z").
+  //   The preset uses a descriptive placeholder — replace with your actual
+  //   Skydio UID if sending as a re-broadcast.
+  skydio_drone: {
+    label: 'Skydio Drone (Air SA + Video + Sensor FOV)',
+    staleMins: 1,
+    formValues: {
+      uid:       'skydio-REPLACE-WITH-HARDWARE-UID',
+      callsign:  'Skydio-A1',
+      type:      'a-f-A-M-H-Q',
+      how:       'm-g',
+      lat:       '41.3920000', lon: '-73.9520000', hae: '50.0',
+      ce:        '0', le: '0',
+      groupColor: 'Cyan', groupRole: 'Team Member',
+      speed:     '5.0', course: '90.0',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="skydio-REPLACE-WITH-HARDWARE-UID"
+       type="a-f-A-M-H-Q"
+       how="m-g"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="41.3920000" lon="-73.9520000" hae="50.0" ce="0.0" le="0.0"/>
+  <detail>
+    <contact callsign="Skydio-A1"/>
+    <!-- RTSP stream URL — ATAK uses this for tap-to-view video on the map icon.
+         Replace IP/port with your Skydio's actual stream address. -->
+    <__video url="rtsp://192.168.94.250:8554/Skydio-A1"/>
+    <!-- Camera footprint overlay parameters confirmed from live capture.
+         azimuth: camera heading (degrees), range: footprint depth (meters),
+         fov/vfov: horizontal/vertical field of view (degrees). -->
+    <sensor vfov="26.7842009245169"
+            elevation="0.0"
+            roll="0"
+            range="100"
+            azimuth="90.0"
+            displayMagneticReference="0"
+            fov="45.966572057538855"/>
+    <track speed="5.0" course="90.0"/>
+  </detail>
+</event>`,
+  },
+
+  // ── Skydio Ground Control Station ────────────────────────────────────────
+  // type a-f-G-U-U-M-A confirmed from live Skydio ATAK stream.
+  //
+  // WHY Ground dimension despite controlling an airborne asset:
+  //   The GCS is a ground-based machine. MIL-STD-2525C classifies by the
+  //   physical location of the entity, not what it controls. a-f-G-U-U-M-A
+  //   breaks down as: Friendly → Ground → Unit → Combat Support → Military
+  //   Intelligence → Aerial Exploitation. Confirmed against the 2525C symbol
+  //   "Ground Track / Unit / Combat Support / Military Intelligence /
+  //   Aerial Exploitation" — this is the exact ATAK symbol the Skydio GCS
+  //   renders as on the map.
+  //
+  // WHY MINIMAL DETAIL BLOCK:
+  //   The real Skydio GCS CoT has only <contact callsign>. No <__group>,
+  //   no <takv>, no <track>. The preset matches exactly what the hardware
+  //   sends — adding fields that weren't in the capture would be speculative.
+  //
+  // WHY how="m-g":
+  //   The GCS auto-broadcasts via machine GPS, same as the drone itself.
+  //
+  // UID FORMAT NOTE:
+  //   Skydio GCS UID is a 16-char hex string (e.g. "c62db00a09a47e77"),
+  //   distinct from the drone's alphanumeric UID format. Replace with your
+  //   actual GCS hardware UID.
+  skydio_gcs: {
+    label: 'Skydio Ground Control Station',
+    staleMins: 1,
+    formValues: {
+      uid:      'REPLACE-WITH-GCS-HEX-UID',
+      callsign: 'Skydio-A1 Operator',
+      type:     'a-f-G-U-U-M-A',
+      how:      'm-g',
+      lat:      '41.3918000', lon: '-73.9522000', hae: '-17.0',
+      ce:       '0', le: '0',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="REPLACE-WITH-GCS-HEX-UID"
+       type="a-f-G-U-U-M-A"
+       how="m-g"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="41.3918000" lon="-73.9522000" hae="-17.0" ce="0.0" le="0.0"/>
+  <detail>
+    <!-- Minimal detail block matches confirmed live capture exactly.
+         Skydio GCS does not broadcast __group, takv, or track. -->
+    <contact callsign="Skydio-A1 Operator"/>
+  </detail>
+</event>`,
+  },
+
   // ── UAV — Rotary Wing Drone RPV (Air classification) ─────────────────────
   // Use Air dimension when operating around manned aviation / ATC environments.
   uav_air_rpv: {

@@ -25,7 +25,8 @@
 
 # Path to your Python virtualenv (the directory containing bin/activate).
 # Tries common locations automatically if left blank.
-VENV_PATH="/home/warthog/CoT_Tester/venv"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PATH="${VENV_PATH:-$SCRIPT_DIR/venv}"
 
 # Port tak_launcher.py listens on (must match --port if you customized it)
 LAUNCHER_PORT=8766
