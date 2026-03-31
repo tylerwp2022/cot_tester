@@ -466,6 +466,82 @@ const PRESETS = {
 </event>`,
   },
 
+  // ── Drone Position Beacon — Full (GARDx / Olympe-style) ──────────────────
+  // type a-f-A-M-H-Q (friendly / air / military / helicopter / quadrotor).
+  // This is the "Blue Force Tracking" CoT produced by format_drone_position_cot()
+  // in cot_sender.py — it places a friendly UAV icon on the TAK map with:
+  //
+  //   <contact>   callsign label shown on the ATAK map icon
+  //   <__video>   tap-to-view RTSP stream link (double-underscore = ATAK proprietary)
+  //   <sensor>    camera footprint wedge overlay on the map:
+  //                 azimuth   = drone body yaw (Anafi gimbal cannot pan independently)
+  //                 elevation = gimbal pitch (negative = below horizon; -90 = nadir)
+  //                 fov/vfov  = computed from 1x HFOV (84°) and current zoom level
+  //                             Both narrow proportionally as zoom increases.
+  //                 range     = 100 m (hardcoded to match reference Skydio CoT pattern)
+  //   <track>     speed/course for ATAK dead-reckoning display
+  //   <remarks>   human-readable status: battery, RSSI, fly state, AGL, zoom
+  //
+  // ce/le = 0.0: TAK drone plugin convention (confirmed from live Skydio capture).
+  // access="Undefined": standard drone CoT pattern.
+  // stale = 1 minute: if the broadcast thread dies the icon disappears quickly.
+  //
+  // NOTE on fov values: at 1x zoom, Anafi HFOV = 84°, VFOV = 50.2° (16:9 sensor).
+  // At 3x zoom: HFOV ≈ 31.2°, VFOV ≈ 17.9°.  The zoom level and derived FOV
+  // appear in the <remarks> string so operators can see the current zoom state.
+  drone_beacon_full: {
+    label: 'Drone Beacon — Full (Sensor + RTSP)',
+    staleMins: 1,
+    formValues: {
+      uid: 'anafi-gardx-example-001', callsign: 'Anafi-1',
+      type: 'a-f-A-M-H-Q', how: 'm-g',
+      lat: '41.3920000', lon: '-73.9520000', hae: '85.34',
+      ce: '0.0', le: '0.0',
+      speed: '0.0', course: '237.4',
+    },
+    xml: (now, stale) => `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="anafi-gardx-example-001"
+       type="a-f-A-M-H-Q"
+       how="m-g"
+       time="${now}" start="${now}" stale="${stale}" access="Undefined">
+  <point lat="41.3920000" lon="-73.9520000" hae="85.34" ce="0.0" le="0.0"/>
+  <detail>
+    <!-- Callsign label shown on the ATAK map icon -->
+    <contact callsign="Anafi-1"/>
+
+    <!-- RTSP tap-to-view link — operators tap the drone icon to open the stream.
+         Double-underscore prefix = ATAK-proprietary CoT wire format (not a typo). -->
+    <__video url="rtsp://192.168.100.21/live"/>
+
+    <!-- Camera footprint wedge overlay on the TAK map.
+         azimuth    = drone body heading (Anafi gimbal cannot pan independently)
+         elevation  = gimbal pitch; -90 = nadir (pointing straight down)
+         fov/vfov   = H×V field of view at 1x zoom for the Anafi wide-angle sensor
+                      HFOV=84° / VFOV=50.2° (16:9 aspect, derived from sensor geometry)
+         range      = footprint depth; hardcoded to 100 m per drone CoT convention
+         roll       = 0 — Anafi has no gimbal roll axis
+         displayMagneticReference = 0 — use GPS true-north headings -->
+    <sensor azimuth="237.4"
+            elevation="-90.0"
+            fov="84.0"
+            vfov="50.2338"
+            range="100"
+            roll="0"
+            displayMagneticReference="0"/>
+
+    <!-- Speed and ground-track course for ATAK dead-reckoning arrow.
+         course = ground-track direction (where drone is actually going).
+         Falls back to body yaw when speed < 0.5 m/s (GPS noise dominates). -->
+    <track speed="0.0" course="237.4"/>
+
+    <!-- Human-readable status line — visible in ATAK marker detail panel.
+         Bat: drone%/controller% | RSSI | fly state | AGL altitude | Climb | Zoom -->
+    <remarks>Bat: 82%/91% | RSSI: -62dBm | hovering | AGL: 84.1m | Climb: +0.0m/s | Zoom: 1.0x (84.0°×50.2°)</remarks>
+  </detail>
+</event>`,
+  },
+
   // ── Hostile Ground Vehicle ────────────────────────────────────────────────
   hostile_vehicle: {
     label: 'Hostile Vehicle',
@@ -718,6 +794,88 @@ const PRESETS = {
     <link uid="ANDROID-dfac01d76beec661" production_time="${now}"
           type="a-f-G-U-C" parent_callsign="TRILL3" relation="p-p"/>
     <remarks/>
+  </detail>
+</event>`;
+    },
+  },
+
+  // ── Force Delete Marker ───────────────────────────────────────────────────
+  // Sends a t-x-d-d command with <__forcedelete/> to remove a marker from all
+  // connected ATAK devices, including markers protected by <archive/>.
+  //
+  // KEY STRUCTURAL DETAILS (verified against live ATAK traffic):
+  //   - The event uid is a fresh command UID ("delete-cmd-{first8ofTarget}"),
+  //     NOT the target's UID. This is a deletion command, not an update.
+  //   - The target UID goes inside <link uid="...">, not as the event uid.
+  //   - <__forcedelete/> is the ATAK-proprietary element that bypasses the
+  //     archive protection. A plain t-x-d-d without it will silently fail on
+  //     archived markers.
+  //   - The <point> coordinates don't matter for a force delete — TAK uses the
+  //     <link uid> to identify the target regardless of where the command lands.
+  //   - No access="Undefined" on t-x-d-d — task types don't use that attribute.
+  //   - stale=1 minute: this is a fire-and-forget command, not a persistent entity.
+  //
+  // USAGE:
+  //   Replace the target_uid placeholder with the real UID of the marker to delete.
+  //   For convenience, use the Delete Marker panel — paste the target's CoT XML
+  //   and click "↓ Parse" to auto-fill, then switch back here to send via preset.
+  //
+  // WHY SEND 3×: ATAK's UDP multicast delivery is unreliable. The Delete Marker
+  //   panel defaults to 3× for this reason. From the Preset panel, click Send
+  //   Preset multiple times or use the Delete Marker panel for repeat control.
+  // ── Force Delete Marker ───────────────────────────────────────────────────
+  // Sends a t-x-d-d command with <__forcedelete/> to remove a marker from all
+  // connected ATAK devices, including markers protected by <archive/>.
+  //
+  // KEY STRUCTURAL DETAILS (verified against live ATAK traffic):
+  //   - The event uid is a fresh command UID ("delete-cmd-{first8ofTarget}"),
+  //     NOT the target's UID. This is a deletion command, not an update.
+  //   - The target UID goes inside <link uid="...">, not as the event uid.
+  //   - <__forcedelete/> is the ATAK-proprietary element that bypasses the
+  //     archive protection. A plain t-x-d-d without it will silently fail on
+  //     archived markers.
+  //   - The <point> coordinates don't matter for a force delete — TAK uses the
+  //     <link uid> to identify the target regardless of where the command lands.
+  //   - No access="Undefined" on t-x-d-d — task types don't use that attribute.
+  //   - stale=1 minute: this is a fire-and-forget command, not a persistent entity.
+  //
+  // USAGE:
+  //   Replace the target_uid placeholder with the real UID of the marker to delete.
+  //   For convenience, use the Delete Marker panel — paste the target's CoT XML
+  //   and click "↓ Parse" to auto-fill, then switch back here to send via preset.
+  //
+  // WHY SEND 3×: ATAK's UDP multicast delivery is unreliable. The Delete Marker
+  //   panel defaults to 3× for this reason. From the Preset panel, click Send
+  //   Preset multiple times or use the Delete Marker panel for repeat control.
+  delete_force: {
+    label: 'Force Delete Marker',
+    staleMins: 1,
+    formValues: null, // t-x-d-d has no SA form mapping — not a position entity
+
+    xml: (now, stale) => {
+      // Placeholder target UID — operator must replace with the real target UID.
+      // Shown with a recognizable fake value so it's obvious it's a template.
+      const targetUid = 'a1b2c3d4-dead-beef-face-example00099';
+
+      // Event UID is a fresh command identifier, NOT the target UID.
+      // Convention: "delete-cmd-" + first 8 chars of target UID.
+      const cmdUid = `delete-cmd-${targetUid.slice(0, 8)}`;
+
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0"
+       uid="${cmdUid}"
+       type="t-x-d-d"
+       how="m-g"
+       time="${now}" start="${now}" stale="${stale}">
+  <point lat="0.0000000" lon="0.0000000" hae="0.0" ce="9999999.0" le="9999999.0"/>
+  <detail>
+    <!-- Replace this uid with the UID of the marker you want to delete. -->
+    <!-- The <point> coordinates above are irrelevant — TAK keys on this uid. -->
+    <link uid="${targetUid}" relation="none" type="none"/>
+
+    <!-- ATAK-proprietary element — required to delete archived markers.
+         Without this, t-x-d-d silently fails on markers with <archive/>. -->
+    <__forcedelete/>
   </detail>
 </event>`;
     },

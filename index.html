@@ -2020,7 +2020,7 @@ Fill in callsign and UID to see generated XML...</pre>
         <div class="preset-card-type">a-f-A-M-H-Q</div>
         <div class="preset-card-desc">Rotary drone under Air dimension.</div>
       </div>
-      <div class="preset-card" onclick="selectPreset('skydio_drone')" id="card-skydio_drone">
+<div class="preset-card" onclick="selectPreset('skydio_drone')" id="card-skydio_drone">
         <div class="preset-card-title">🛸 Skydio Drone</div>
         <div class="preset-card-type">a-f-A-M-H-Q</div>
         <div class="preset-card-desc">Enterprise autonomous drone. Includes RTSP video URL and camera sensor FOV overlay. Confirmed from live ATAK stream.</div>
@@ -2029,6 +2029,11 @@ Fill in callsign and UID to see generated XML...</pre>
         <div class="preset-card-title">🎮 Skydio Ground Control Station</div>
         <div class="preset-card-type">a-f-G-U-U-M-A</div>
         <div class="preset-card-desc">Skydio GCS operator station. Ground-based machine aviation asset. Minimal detail block matches confirmed live capture.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('drone_beacon_full')" id="card-drone_beacon_full">
+        <div class="preset-card-title">📡 Drone Beacon — Full</div>
+        <div class="preset-card-type">a-f-A-M-H-Q + sensor + RTSP</div>
+        <div class="preset-card-desc">GARDx-style UAV position beacon with camera footprint wedge (<code style="font-size:0.65rem;color:#79c0ff">&lt;sensor&gt;</code>), tap-to-view RTSP stream (<code style="font-size:0.65rem;color:#79c0ff">&lt;__video&gt;</code>), and operator remarks string.</div>
       </div>
       <div class="preset-card" onclick="selectPreset('hostile_vehicle')" id="card-hostile_vehicle">
         <div class="preset-card-title">🟥 Hostile Vehicle</div>
@@ -2069,6 +2074,11 @@ Fill in callsign and UID to see generated XML...</pre>
         <div class="preset-card-title">🟠 Drawing Circle</div>
         <div class="preset-card-type">u-d-c-c</div>
         <div class="preset-card-desc">Orange circle with semi-transparent fill.</div>
+      </div>
+      <div class="preset-card" onclick="selectPreset('delete_force')" id="card-delete_force">
+        <div class="preset-card-title">🗑️ Force Delete Marker</div>
+        <div class="preset-card-type">t-x-d-d + __forcedelete</div>
+        <div class="preset-card-desc">Remove any marker, including <code style="font-size:0.65rem;color:#79c0ff">&lt;archive/&gt;</code> protected ones. Replace the placeholder UID with your target's UID.</div>
       </div>
     </div>
 

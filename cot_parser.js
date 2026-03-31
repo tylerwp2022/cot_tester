@@ -221,7 +221,10 @@ function parseRawCoT() {
   const linkCall    = xmlAttr(doc, 'link',                'parent_callsign') || '';
   const linkRel     = xmlAttr(doc, 'link',                'relation')    || '';
   const linkType    = xmlAttr(doc, 'link',                'type')        || '';
-  const hasArchive  = !!doc.querySelector('archive');
+  const hasArchive     = !!doc.querySelector('archive');
+  // Presence of <__forcedelete/> distinguishes force-delete from standard t-x-d-d.
+  // The element carries no attributes — its presence alone signals the method.
+  const hasForceDelete = !!doc.querySelector('__forcedelete');
   // Spot map markers use <color argb="">; drawn shapes use <color value="">
   const colorArgb   = xmlAttr(doc, 'color', 'argb')  || '';
   const colorValue  = xmlAttr(doc, 'color', 'value') || '';
@@ -229,6 +232,31 @@ function parseRawCoT() {
   const creatorCall = xmlAttr(doc, 'creator', 'callsign') || '';
   const creatorTime = xmlAttr(doc, 'creator', 'time')     || '';
   const creatorType = xmlAttr(doc, 'creator', 'type')     || '';
+
+  // ── Drone sensor/camera fields ────────────────────────────────────────────
+  // <sensor> drives the camera footprint wedge overlay on the ATAK map.
+  //   azimuth    — camera horizontal pointing direction (degrees, true north)
+  //   elevation  — gimbal pitch below/above horizon (negative = below horizon)
+  //   fov        — horizontal field of view (degrees)
+  //   vfov       — vertical field of view (degrees)
+  //   range      — footprint wedge depth (meters)
+  //   roll       — gimbal roll (0 for gimbals with no roll axis, e.g. Anafi)
+  //   displayMagneticReference — 0 = true north, 1 = magnetic north
+  const sensorEl        = doc.querySelector('sensor');
+  const sensorAzimuth   = sensorEl?.getAttribute('azimuth')                  || '';
+  const sensorElevation = sensorEl?.getAttribute('elevation')                || '';
+  const sensorFov       = sensorEl?.getAttribute('fov')                      || '';
+  const sensorVfov      = sensorEl?.getAttribute('vfov')                     || '';
+  const sensorRange     = sensorEl?.getAttribute('range')                    || '';
+  const sensorRoll      = sensorEl?.getAttribute('roll')                     || '';
+  const sensorMagRef    = sensorEl?.getAttribute('displayMagneticReference') || '';
+
+  // <__video> carries the RTSP tap-to-view URL for drone camera live feed.
+  // The double-underscore prefix is the CoT wire format for ATAK-proprietary
+  // detail elements — it is NOT a JS naming convention; it appears verbatim in
+  // the XML. Tapping the drone icon in ATAK opens this URL in its video panel.
+  const videoEl  = doc.querySelector('__video');
+  const videoUrl = videoEl?.getAttribute('url') || '';
 
   // ── Drawn shape fields (u-d-f, u-d-r, u-d-c-c) ───────────────────────────
   const strokeColor  = xmlAttr(doc, 'strokeColor',  'value') || '';
@@ -395,6 +423,66 @@ function parseRawCoT() {
     }
   }
 
+  // ── Delete command analysis (t-x-d-d) ────────────────────────────────────
+  // t-x-d-d is a fire-and-forget command, not a position entity. Two methods:
+  //
+  //   Force Delete  — event uid is a fresh command ID ("delete-cmd-{first8}"),
+  //                   the TARGET uid lives in <link uid="...">, and
+  //                   <__forcedelete/> is present. Works on <archive/> markers.
+  //
+  //   Null Island   — event uid IS the target uid. The entity is overwritten
+  //                   in-place with lat=0/lon=0 and an already-expired stale,
+  //                   moving it off the map. Fallback when force delete fails.
+  //
+  //   Standard      — plain t-x-d-d with <link>, no <__forcedelete/>.
+  //                   Does NOT work on archived markers.
+  if (type === 't-x-d-d') {
+    rows.push({
+      label: '── Delete Command ──',
+      value: '',
+      note: 'type t-x-d-d — removes an entity from the COP on all connected devices',
+      separator: true,
+    });
+
+    if (hasForceDelete) {
+      // Force delete: target is in <link uid>, not the event uid
+      row('Delete Method', 'Force Delete',
+          '<__forcedelete/> present — works on <archive/> markers. Recommended method.');
+      row('Target UID', linkUid,
+          'Entity to remove from the COP — from <link uid="...">. NOT the event uid (which is just a command ID).');
+      if (linkRel) row('Link Relation', linkRel, 'Expected "none" on force delete commands');
+      if (linkType) row('Link Type',    linkType, 'Expected "none" on force delete commands');
+    } else {
+      // Distinguish Null Island from standard t-x-d-d:
+      // Null Island markers have lat≈0, lon≈0, and an already-expired stale.
+      const isNullIsland = Math.abs(parseFloat(lat)) < 0.001
+                        && Math.abs(parseFloat(lon)) < 0.001
+                        && stale && new Date(stale) < new Date();
+
+      if (isNullIsland) {
+        row('Delete Method', 'Null Island Overwrite',
+            'No <__forcedelete/> — overwrites entity to 0°N 0°E with expired stale. '
+            + 'Moves marker off the map. Use when force delete fails.');
+        row('Target UID', uid,
+            'Event uid IS the target — Null Island overwrites the entity directly (same uid = update).');
+        row('Overwrite Coords', `${lat}, ${lon}`, 'Null Island — 0°N 0°E, effectively off any tactical map');
+        row('Stale', stale, '⚠️ Already expired — ATAK will remove the entity from the display');
+      } else if (linkUid) {
+        row('Delete Method', 'Standard t-x-d-d',
+            'No <__forcedelete/> — may silently fail on markers with <archive/>. '
+            + 'Use Force Delete for archived markers.');
+        row('Target UID', linkUid,
+            'Entity to remove — from <link uid="...">');
+        if (linkRel) row('Link Relation', linkRel, '');
+        if (linkType) row('Link Type',    linkType, '');
+      } else {
+        // Unusual t-x-d-d — no link, no forcedelete, not null island
+        row('Delete Method', 'Unknown variant',
+            'No <__forcedelete/> and no <link uid> found — structure may be non-standard.');
+      }
+    }
+  }
+
   // ── Drawn shape analysis ──────────────────────────────────────────────────
   if (type && (type.startsWith('u-d-') || vertexLinks.length > 0 || ellipseEl)) {
 
@@ -475,6 +563,58 @@ function parseRawCoT() {
 
   row('Remarks', remarks, '');
 
+  // ── Drone sensor / camera footprint ───────────────────────────────────────
+  // Show a sensor section only when a <sensor> or <__video> element is present.
+  // Both are GARDx / drone-specific fields not seen in standard SA beacons.
+  if (sensorEl || videoEl) {
+    rows.push({
+      label: '── Drone Camera ──',
+      value: '',
+      note: '<sensor> drives the camera footprint wedge on the ATAK map; <__video> is the tap-to-view RTSP link',
+      separator: true,
+    });
+
+    if (videoUrl) {
+      row('RTSP Stream', videoUrl,
+          'Tap-to-view URL — operators tap the drone icon in ATAK to open this stream');
+    }
+
+    if (sensorAzimuth) {
+      row('Camera Azimuth', `${sensorAzimuth}°`,
+          'Horizontal pointing direction (true north). For Anafi: = drone body yaw (gimbal cannot pan independently)');
+    }
+    if (sensorElevation) {
+      const elNum = parseFloat(sensorElevation);
+      let elevNote = 'Gimbal pitch — negative = camera below horizon';
+      if (elNum === -90)        elevNote = 'Nadir — camera pointing straight down';
+      else if (elNum === 0)     elevNote = 'Horizontal — camera level with horizon';
+      else if (elNum < 0)       elevNote = `Camera tilted ${Math.abs(elNum)}° below horizon`;
+      else if (elNum > 0)       elevNote = `Camera tilted ${elNum}° above horizon`;
+      row('Camera Elevation', `${sensorElevation}°`, elevNote);
+    }
+    if (sensorFov) {
+      const fovLabel = sensorVfov
+        ? `${parseFloat(sensorFov).toFixed(1)}° × ${parseFloat(sensorVfov).toFixed(1)}°`
+        : `${parseFloat(sensorFov).toFixed(1)}°`;
+      row('FOV (H × V)', fovLabel,
+          sensorVfov
+            ? 'Horizontal × Vertical field of view. Narrows as zoom increases.'
+            : 'Horizontal field of view');
+    }
+    if (sensorRange) {
+      row('Sensor Range', `${sensorRange} m`,
+          'Wedge depth in meters — footprint projected on the map at this distance');
+    }
+    if (sensorRoll) {
+      row('Gimbal Roll', `${sensorRoll}°`,
+          sensorRoll === '0' ? 'No gimbal roll axis (standard for Anafi)' : 'Gimbal roll offset');
+    }
+    if (sensorMagRef !== '') {
+      row('Mag Reference', sensorMagRef === '0' ? '0 (true north)' : `${sensorMagRef} (magnetic north)`,
+          'displayMagneticReference — 0 = GPS true north headings');
+    }
+  }
+
   // ARGB color annotation
   const effectiveColor = colorArgb || colorValue;
   if (effectiveColor) {
@@ -500,10 +640,16 @@ function parseRawCoT() {
     row('Created At',      creatorTime, '');
   }
 
-  row('Link UID',      linkUid,  '');
-  row('Link Callsign', linkCall, '');
-  row('Link Relation', linkRel,  '');
-  row('Link Type',     linkType, '');
+  // Link fields — shown generically for standard entity types.
+  // For t-x-d-d, the link uid is the DELETE TARGET and is already shown in
+  // the dedicated delete section above with full context. Suppress here to
+  // avoid a redundant unlabeled "Link UID" row at the bottom of the table.
+  if (type !== 't-x-d-d') {
+    row('Link UID',      linkUid,  '');
+    row('Link Callsign', linkCall, '');
+    row('Link Relation', linkRel,  '');
+    row('Link Type',     linkType, '');
+  }
 
   if (takServer) {
     row('TAK Server Relay',
@@ -621,6 +767,11 @@ function parseRawCoT() {
     'fileshare', 'ackrequest',
     '__shapeExtras', 'strokeColor', 'strokeWeight', 'strokeStyle', 'fillColor',
     'labels_on', 'shape', 'extrudeMode', 'height',
+    // Drone / UAS fields
+    'sensor',         // Camera footprint wedge overlay: azimuth, elevation, fov, vfov, range, roll
+    '__video',        // Tap-to-view RTSP stream URL for drone live feed
+    // Delete command fields
+    '__forcedelete',  // Force delete marker — presence alone signals method; no attributes
   ]);
 
   const detailEl = doc.querySelector('detail');
